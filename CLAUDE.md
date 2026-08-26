@@ -18,9 +18,35 @@ history — there is no in-repo phase tracker).
   "Cerrar sesión" just resets the state to `null`. The role is **not** persisted
   (by design for this phase) and there is no real auth/accounts yet.
 
+- **Phase 3** (done): BLE connection from the Usuario role to an ESP32 test
+  peripheral. `UsuarioBleScreen.kt` replaces `RoleHomeScreen` for
+  `Role.USUARIO` only (Apoderado still uses the generic `RoleHomeScreen`
+  unchanged). All BLE logic lives in `app/.../ble/` (`BleManager`,
+  `BlePermissions`, `BleConstants`, `BleModels`) — the UI only reads
+  `BleManager`'s `mutableStateOf` properties and calls `startScan()` /
+  `connect()` / `disconnect()`. No coroutines/Flow: BLE callbacks (which run
+  on Binder threads) write directly to Compose state, which is safe from any
+  thread. See `app/.../ble/BleConstants.kt` for the Service/Characteristic
+  UUIDs (must match `esp32/GuardianAppBleTest/GuardianAppBleTest.ino`) and
+  `esp32/README.md` for the ESP32 test firmware (Arduino IDE, board "ESP32
+  Dev Module", no external libraries needed).
+  - Permission model (dual, because `minSdk 26` spans the Android 12/API 31
+    permission split): `BLUETOOTH_SCAN`/`BLUETOOTH_CONNECT` on API 31+,
+    `ACCESS_FINE_LOCATION` (runtime) + `BLUETOOTH`/`BLUETOOTH_ADMIN`
+    (install-time) below that. See `BlePermissions.kt` / `AndroidManifest.xml`.
+  - Deliberately uses the pre-API-33 GATT surface (`characteristic.value`,
+    `descriptor.value`, single-arg `onCharacteristicChanged`) with
+    `@Suppress("DEPRECATION")`/`@SuppressLint("MissingPermission")` rather
+    than branching on `Build.VERSION.SDK_INT >= 33` for the newer
+    `ByteArray`-based overloads — one code path across `minSdk 26..targetSdk
+    37`, at the cost of deprecation warnings (suppressed, not errors).
+    `./gradlew lintDebug` should stay clean of new errors when touching this
+    file.
+
 Still not implemented (explicitly deferred to later phases — don't add unless
-asked): BLE, Firebase (Auth/FCM/etc.), ESP32 integration, real login/accounts,
-database, notifications, phone-to-phone communication, backend/API.
+asked): Firebase (Auth/FCM/etc.), real login/accounts, database, push
+notifications, phone-to-phone communication, backend/API. Phase 4 is
+"send the event from Android to Firebase."
 
 `androidx.appcompat` and `com.google.android.material` (the old View-system Material
 Components library) are still declared as dependencies and are what the manifest
@@ -83,11 +109,15 @@ Run all commands from the repo root using the Gradle wrapper.
 ```
 
 Source sets:
-- Application code: `app/src/main/java/com/example/guardianapp` (flat package, one
-  file per screen/composable — `MainActivity.kt`, `Role.kt`,
-  `RoleSelectionScreen.kt`, `RoleHomeScreen.kt`)
+- Application code: `app/src/main/java/com/example/guardianapp` — flat package
+  for screens/composables (`MainActivity.kt`, `Role.kt`,
+  `RoleSelectionScreen.kt`, `RoleHomeScreen.kt`, `UsuarioBleScreen.kt`); BLE
+  logic separated into the `ble/` subpackage (`BleManager.kt`,
+  `BlePermissions.kt`, `BleConstants.kt`, `BleModels.kt`).
 - JVM unit tests: `app/src/test/java/com/example/guardianapp`
 - Instrumented (on-device) tests: `app/src/androidTest/java/com/example/guardianapp`
+- `esp32/` (repo root, outside `app/`, not part of the Gradle build): Arduino
+  sketch + README for the ESP32 BLE test peripheral used in Phase 3.
 
 ### Running `./gradlew` from a plain terminal
 

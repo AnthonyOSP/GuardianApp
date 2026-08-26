@@ -40,10 +40,10 @@ fun GuardianAppRoot() {
         color = MaterialTheme.colorScheme.background
     ) {
         val role = selectedRole
-        if (role == null) {
-            RoleSelectionScreen(onRoleSelected = { selectedRole = it })
-        } else {
-            RoleHomeScreen(role = role, onCerrarSesion = { selectedRole = null })
+        when (role) {
+            null -> RoleSelectionScreen(onRoleSelected = { selectedRole = it })
+            Role.USUARIO -> UsuarioBleScreen(onCerrarSesion = { selectedRole = null })
+            Role.APODERADO -> RoleHomeScreen(role = role, onCerrarSesion = { selectedRole = null })
         }
     }
 }

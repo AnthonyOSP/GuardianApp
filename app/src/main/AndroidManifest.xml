@@ -2,6 +2,31 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Bluetooth: Android 11 (API 30) y anteriores.
+         BLUETOOTH/BLUETOOTH_ADMIN son permisos "normales" (se conceden solo
+         por instalar). ACCESS_FINE_LOCATION sí se debe pedir en tiempo de
+         ejecución: es obligatorio para poder escanear BLE en estas versiones. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <!-- Bluetooth: Android 12 (API 31) y superiores. Permisos nuevos en
+         tiempo de ejecución. neverForLocation porque no derivamos ubicación
+         física de los resultados del escaneo, solo buscamos el ESP32. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- La app debe poder instalarse igual en equipos sin BLE; simplemente
+         la funcionalidad de la pantalla Usuario quedará deshabilitada. -->
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="false" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
