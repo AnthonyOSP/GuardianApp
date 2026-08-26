@@ -5,13 +5,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project state
 
 GuardianApp is being built in phases (see the user's phase instructions in chat/PR
-history — there is no in-repo phase tracker). **Phase 1** (done): a single-module
-Android project using Kotlin + Jetpack Compose, with one screen (`MainActivity` /
-`GuardianAppScreen` in `app/src/main/java/com/example/guardianapp/MainActivity.kt`)
-that just shows "GuardianApp" / "Aplicación funcionando correctamente" / "FASE 1".
-No BLE, Firebase, roles (Usuario/Apoderado), auth, database, notifications, or
-ESP32 integration yet — those are explicitly deferred to later phases. Don't add
-them unless asked.
+history — there is no in-repo phase tracker).
+
+- **Phase 1** (done): single-module Android project using Kotlin + Jetpack Compose,
+  with a static "app is working" screen.
+- **Phase 2** (done): local role selection — `RoleSelectionScreen` lets the user pick
+  `Role.USUARIO` or `Role.APODERADO` (`Role.kt`); `GuardianAppRoot` in
+  `MainActivity.kt` holds the selected role as plain Compose state
+  (`remember { mutableStateOf<Role?>(null) }`) and switches between
+  `RoleSelectionScreen` and `RoleHomeScreen` — no navigation library was added, since
+  it's a single back-and-forth toggle with no back-stack/args/deep-link needs.
+  "Cerrar sesión" just resets the state to `null`. The role is **not** persisted
+  (by design for this phase) and there is no real auth/accounts yet.
+
+Still not implemented (explicitly deferred to later phases — don't add unless
+asked): BLE, Firebase (Auth/FCM/etc.), ESP32 integration, real login/accounts,
+database, notifications, phone-to-phone communication, backend/API.
 
 `androidx.appcompat` and `com.google.android.material` (the old View-system Material
 Components library) are still declared as dependencies and are what the manifest
@@ -27,7 +36,8 @@ itself (KGP is a runtime dependency of AGP). Only the Compose compiler plugin
 applied explicitly, in `app/build.gradle.kts`. Applying `kotlin.android` manually
 fails the build with an explicit error telling you to remove it.
 
-This is not a git repository yet (no `.git`). If the user asks to commit, `git init` first.
+This is a git repository (`git init` was run during Phase 2); the first commits are
+tagged `Fase 1: ...` / `Fase 2: ...`.
 
 ## Build system notes
 
@@ -73,7 +83,9 @@ Run all commands from the repo root using the Gradle wrapper.
 ```
 
 Source sets:
-- Application code: `app/src/main/java/com/example/guardianapp`
+- Application code: `app/src/main/java/com/example/guardianapp` (flat package, one
+  file per screen/composable — `MainActivity.kt`, `Role.kt`,
+  `RoleSelectionScreen.kt`, `RoleHomeScreen.kt`)
 - JVM unit tests: `app/src/test/java/com/example/guardianapp`
 - Instrumented (on-device) tests: `app/src/androidTest/java/com/example/guardianapp`
 
