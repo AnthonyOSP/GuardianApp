@@ -43,10 +43,45 @@ history — there is no in-repo phase tracker).
     `./gradlew lintDebug` should stay clean of new errors when touching this
     file.
 
+- **Phase 4** (done): the Usuario role forwards each BLE event to Cloud
+  Firestore. All Firebase code lives in `app/.../firebase/`
+  (`FirebaseRepository`, `EventUploadState`) — `BleManager`/`ble/` were
+  **not** modified. `UsuarioBleScreen.kt` reacts to `bleManager.lastEvent`
+  changing (`LaunchedEffect`) by calling
+  `firebaseRepository.logEvent(event.message)`, and reads
+  `firebaseRepository.uploadState` (same "class exposes `mutableStateOf`,
+  UI just reads it" pattern as `BleManager`) to render
+  Idle/Sending/Success/Error under the received-event text.
+  - Firestore collection `events`, one document per event: `type`
+    (`"ESP32_EVENT"`), `message`, `deviceId` (`"ESP32_GUARDIAN"`, a fixed
+    placeholder — see `FirebaseRepository.DEFAULT_DEVICE_ID`), `source`
+    (`"esp32"`), `timestamp` (`FieldValue.serverTimestamp()`, not the phone's
+    local clock).
+  - `FirebaseRepository.logEvent` never throws outward: it handles Firebase
+    not configured (`IllegalStateException` from `FirebaseFirestore.getInstance()`),
+    no internet (pre-checked via `ConnectivityManager`), empty message,
+    Firestore errors (`addOnFailureListener`, mapped to friendlier text for
+    `UNAVAILABLE`/`PERMISSION_DENIED`/`DEADLINE_EXCEEDED`), and a manual
+    10s timeout (`Handler.postDelayed`, guarded by a request-sequence number
+    so a stale timeout can't clobber a later request's real result) — all
+    surfaced as `EventUploadState.Error(message)`, never a crash.
+  - Requires `google-services.json` in `app/` (gitignored — see
+    `firebase/README.md` for how to generate one; not needed to read/edit
+    the Kotlin code, only to actually build/run) plus the `google-services`
+    Gradle plugin (`gradle/libs.versions.toml`) and `firebase-bom` +
+    `firebase-firestore` deps in `app/build.gradle.kts`.
+  - Firestore security rules (temporary, no Auth yet — see
+    `firebase/firestore.rules` and the "must revisit once Auth exists" note
+    at its top) live in `firebase/firestore.rules`, published by hand in
+    Firebase Console (no Firebase CLI/emulator set up in this repo).
+  - Added `INTERNET` / `ACCESS_NETWORK_STATE` permissions to
+    `AndroidManifest.xml`.
+
 Still not implemented (explicitly deferred to later phases — don't add unless
-asked): Firebase (Auth/FCM/etc.), real login/accounts, database, push
-notifications, phone-to-phone communication, backend/API. Phase 4 is
-"send the event from Android to Firebase."
+asked): Firebase Cloud Messaging / push notifications, real login/accounts
+(Firebase Authentication), the Apoderado phone, phone-to-phone communication,
+a general-purpose backend/API. Phase 5 is "Firebase Cloud Messaging so the
+Apoderado phone gets notified when an event happens."
 
 `androidx.appcompat` and `com.google.android.material` (the old View-system Material
 Components library) are still declared as dependencies and are what the manifest
@@ -113,11 +148,16 @@ Source sets:
   for screens/composables (`MainActivity.kt`, `Role.kt`,
   `RoleSelectionScreen.kt`, `RoleHomeScreen.kt`, `UsuarioBleScreen.kt`); BLE
   logic separated into the `ble/` subpackage (`BleManager.kt`,
-  `BlePermissions.kt`, `BleConstants.kt`, `BleModels.kt`).
+  `BlePermissions.kt`, `BleConstants.kt`, `BleModels.kt`); Firebase logic
+  separated into the `firebase/` subpackage (`FirebaseRepository.kt`,
+  `EventUploadState.kt`).
 - JVM unit tests: `app/src/test/java/com/example/guardianapp`
 - Instrumented (on-device) tests: `app/src/androidTest/java/com/example/guardianapp`
 - `esp32/` (repo root, outside `app/`, not part of the Gradle build): Arduino
   sketch + README for the ESP32 BLE test peripheral used in Phase 3.
+- `firebase/` (repo root, outside `app/`, not part of the Gradle build):
+  `firestore.rules` (source of truth, published by hand in Firebase Console)
+  + README with the manual Firebase Console setup steps for Phase 4.
 
 ### Running `./gradlew` from a plain terminal
 

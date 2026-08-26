@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,8 @@ import com.example.guardianapp.ble.BleConnectionState
 import com.example.guardianapp.ble.BleManager
 import com.example.guardianapp.ble.BlePermissions
 import com.example.guardianapp.ble.DiscoveredDevice
+import com.example.guardianapp.firebase.EventUploadState
+import com.example.guardianapp.firebase.FirebaseRepository
 
 /**
  * FASE 3, pantalla del rol Usuario: buscar el ESP32 por BLE, conectarse y
@@ -46,10 +49,20 @@ import com.example.guardianapp.ble.DiscoveredDevice
 fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
     val context = LocalContext.current
     val bleManager = remember { BleManager(context) }
+    val firebaseRepository = remember { FirebaseRepository(context) }
 
     DisposableEffect(Unit) {
         bleManager.register()
-        onDispose { bleManager.unregister() }
+        onDispose {
+            bleManager.unregister()
+            firebaseRepository.dispose()
+        }
+    }
+
+    // FASE 4: cada vez que llega un evento BLE nuevo, se reenvía a Firestore.
+    // BleManager no sabe nada de Firebase; solo expone `lastEvent`.
+    LaunchedEffect(bleManager.lastEvent) {
+        bleManager.lastEvent?.let { event -> firebaseRepository.logEvent(event.message) }
     }
 
     var permissionsGranted by remember {
@@ -115,7 +128,7 @@ fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
                 }
 
                 when (bleManager.connectionState) {
-                    BleConnectionState.CONNECTED -> ConnectedSection(bleManager)
+                    BleConnectionState.CONNECTED -> ConnectedSection(bleManager, firebaseRepository)
                     BleConnectionState.CONNECTING -> Text("Conectando...")
                     BleConnectionState.DISCONNECTED -> ScanSection(
                         bleManager = bleManager,
@@ -196,7 +209,7 @@ private fun DiscoveredDeviceRow(discovered: DiscoveredDevice, onConectar: () -> 
 }
 
 @Composable
-private fun ConnectedSection(bleManager: BleManager) {
+private fun ConnectedSection(bleManager: BleManager, firebaseRepository: FirebaseRepository) {
     Text(
         text = bleManager.connectedDeviceName ?: "ESP32 Guardian",
         style = MaterialTheme.typography.titleMedium
@@ -211,6 +224,8 @@ private fun ConnectedSection(bleManager: BleManager) {
         Text(text = "Evento recibido:")
         Text(text = event.message, style = MaterialTheme.typography.headlineSmall)
         Text(text = event.receivedAt, style = MaterialTheme.typography.bodySmall)
+        Spacer(modifier = Modifier.height(16.dp))
+        FirebaseStatusSection(uploadState = firebaseRepository.uploadState)
     } else {
         Text(text = "Esperando evento del ESP32...", textAlign = TextAlign.Center)
     }
@@ -218,6 +233,22 @@ private fun ConnectedSection(bleManager: BleManager) {
     Spacer(modifier = Modifier.height(24.dp))
     Button(onClick = { bleManager.disconnect() }) {
         Text("Desconectar")
+    }
+}
+
+/** FASE 4: muestra el resultado del envío del último evento a Firestore. */
+@Composable
+private fun FirebaseStatusSection(uploadState: EventUploadState) {
+    Text(text = "Firebase:", style = MaterialTheme.typography.labelLarge)
+    when (uploadState) {
+        is EventUploadState.Idle -> Text(text = "En espera.")
+        is EventUploadState.Sending -> Text(text = "Enviando...")
+        is EventUploadState.Success -> Text(text = "✓ Evento enviado correctamente")
+        is EventUploadState.Error -> Text(
+            text = "✗ ${uploadState.message}",
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center
+        )
     }
 }
 

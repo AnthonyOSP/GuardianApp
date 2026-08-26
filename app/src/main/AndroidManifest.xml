@@ -21,6 +21,13 @@
         tools:targetApi="s" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- Fase 4: enviar eventos a Cloud Firestore por Internet.
+         ACCESS_NETWORK_STATE es un permiso "normal" (sin diálogo en tiempo
+         de ejecución); lo usamos para detectar "sin conexión" antes de
+         intentar escribir en Firestore, en vez de esperar un timeout. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- La app debe poder instalarse igual en equipos sin BLE; simplemente
          la funcionalidad de la pantalla Usuario quedará deshabilitada. -->
     <uses-feature

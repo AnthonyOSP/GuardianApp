@@ -13,3 +13,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Fase 4: config de Firebase específica del proyecto (contiene el project_id
+# real). No es un secreto que otorgue acceso por sí solo (la seguridad la dan
+# las reglas de Firestore, ver firebase/firestore.rules), pero se mantiene
+# fuera del repo por buena práctica. Cada desarrollador debe descargar su
+# propia copia desde Firebase Console (ver firebase/README.md).
+/app/google-services.json

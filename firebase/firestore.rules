@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// FASE 4 — GuardianApp.
+//
+// Reglas TEMPORALES. Todavía no existe Firebase Authentication, así que no
+// hay forma de verificar quién hace la escritura: cualquiera que tenga la
+// configuración de la app (google-services.json no es secreto) podría llamar
+// directamente a la API de Firestore. Mitigamos parcialmente exigiendo que
+// cada documento tenga exactamente la forma que espera GuardianApp, y
+// bloqueamos toda lectura y toda modificación/eliminación posterior.
+//
+// Esto NO es autenticación ni autorización real. Cuando se implemente
+// Firebase Authentication (fase futura) estas reglas DEBEN reemplazarse por
+// algo que exija `request.auth != null` y, eventualmente, relacione
+// `request.auth.uid` con el dispositivo/usuario dueño del evento.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /events/{eventId} {
+      // Nadie puede leer eventos desde el cliente en esta fase.
+      allow read: if false;
+
+      // Ningún documento se modifica ni se borra una vez creado.
+      allow update, delete: if false;
+
+      // Solo se acepta crear documentos con exactamente los campos
+      // esperados y con `timestamp` igual a la hora del servidor (es decir,
+      // generado con FieldValue.serverTimestamp(), no con Date() local).
+      allow create: if
+        request.resource.data.keys().hasOnly(['type', 'message', 'deviceId', 'source', 'timestamp']) &&
+        request.resource.data.type is string &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() > 0 &&
+        request.resource.data.deviceId is string &&
+        request.resource.data.source is string &&
+        request.resource.data.timestamp == request.time;
+    }
+
+    // Todo lo demás queda denegado por defecto (comportamiento implícito de
+    // Firestore: solo lo que coincide con una regla `allow` se permite).
+  }
+}
