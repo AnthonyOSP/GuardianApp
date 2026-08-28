@@ -1,0 +1,5 @@
+node_modules/
+.env
+# Nunca debe existir una copia local del service account dentro del repo.
+serviceAccountKey.json
+*.serviceaccount.json

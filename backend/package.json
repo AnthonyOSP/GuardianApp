@@ -1,0 +1,17 @@
+{
+  "name": "guardianapp-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GuardianApp (Fase 5): recibe eventos del Usuario por HTTPS y envia notificaciones FCM al Apoderado via Firebase Admin SDK. No escucha Firestore de forma permanente, para funcionar bien en el plan gratuito de Render (se duerme por inactividad).",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "firebase-admin": "^14.3.0"
+  }
+}
