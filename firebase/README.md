@@ -1,4 +1,4 @@
-# Firebase — Fases 4 y 5
+# Firebase — Fases 4, 5 y 6
 
 Este directorio no forma parte del build de Gradle (igual que `esp32/`): es
 documentación y la fuente de verdad de las reglas de Firestore, que se
@@ -17,6 +17,10 @@ eso pasa — ese código vive en `app/src/main/java/com/example/guardianapp/fcm/
 no forma parte del build de Gradle). Ver § 7d más abajo para el contrato
 entre Android y el backend, y § 7e para configurar Android contra tu backend
 desplegado.
+
+Desde la Fase 6, esa notificación llega **únicamente** al Apoderado
+vinculado al Usuario que generó el evento (antes, Fase 5, era broadcast a
+todos los Apoderados registrados). Ver § 7f para el modelo de vinculación.
 
 ## 1. Crear el proyecto en Firebase Console
 
@@ -181,6 +185,52 @@ pero `UsuarioBleScreen` mostrará "Notificación al Apoderado: ✗ El backend no
 está configurado" — es el comportamiento esperado hasta que despliegues el
 backend, no un error de código.
 
+## 7f. Fase 6 — vinculación Usuario↔Apoderado (reemplaza el broadcast)
+
+Desde la Fase 6, el backend **ya no** notifica a todos los Apoderados
+registrados: solo al que está vinculado con el Usuario que generó el
+evento. Piezas nuevas:
+
+- **`vinculaciones/{usuarioId}`** — un documento por Usuario vinculado, doc
+  ID = el código de 6 caracteres que muestra `UsuarioBleScreen`. Campo
+  `apoderadoId` (a qué Apoderado apunta) y `createdAt` (timestamp del
+  servidor).
+- **`apoderadoTokens/{token}`** gana un campo `apoderadoId` (el ID local
+  persistido de ese Apoderado, ver `LocalIdentity.kt`) — antes solo tenía
+  `fcmToken`/`updatedAt`.
+- **`usuarioId`** (Usuario) y **`apoderadoId`** (Apoderado) son IDs
+  anónimos generados una sola vez por instalación y persistidos con
+  `SharedPreferences` (`LocalIdentity.kt`) — **no** hay Firebase
+  Authentication todavía. Es una excepción puntual a "el rol no se
+  persiste" de la Fase 2: el rol elegido sigue sin persistirse, pero esta
+  identidad anónima sí, porque sin eso la vinculación no sobreviviría a
+  cerrar sesión.
+- **Cómo se vinculan**: el Usuario ve su código de 6 caracteres en pantalla
+  (siempre visible, no depende de estar conectado por BLE) y se lo
+  comparte al Apoderado. El Apoderado lo escribe en el campo "Código de tu
+  Usuario" de su pantalla y toca "Vincular" (`VinculacionRepository.kt`).
+
+  **El código de 6 caracteres NO es una medida de seguridad** — es
+  solamente un mecanismo de emparejamiento sencillo para esta fase.
+  Cualquiera que conozca el código de un Usuario podría vincularse a él.
+  La mitigación real llega con **Firebase Authentication, todavía no
+  implementada** (fase futura): ese día, `usuarioId`/`apoderadoId` dejan de
+  generarse localmente y pasan a ser el `uid` real de cada cuenta — el
+  esquema de Firestore de arriba no cambia, solo cambia de dónde sale el
+  valor.
+
+- **Tokens viejos de la Fase 5**: si ya habías registrado el rol Apoderado
+  antes de esta fase, esos documentos en `apoderadoTokens` no tienen
+  `apoderadoId` y quedan inservibles para el nuevo flujo (no rompen nada,
+  simplemente ninguna consulta los va a encontrar). **Bórralos** en
+  Firestore Console → `apoderadoTokens` antes de probar la Fase 6, para no
+  confundirte con tokens huérfanos.
+- **Reglas**: `firestore.rules` tiene el bloque nuevo `match /vinculaciones/{usuarioId}`
+  y el de `apoderadoTokens` actualizado para exigir `apoderadoId`. Hay que
+  **republicarlas** (paso 6) — el archivo también corrige unos backticks
+  sobrantes que habían quedado mal pegados al final del archivo en una
+  edición anterior y que impedían publicarlo.
+
 ## 8. Prueba física obligatoria (Fase 4)
 
 El BLE real necesita un **teléfono Android físico** — el emulador no tiene
@@ -220,7 +270,7 @@ sirviendo para el resto del desarrollo.
    `deviceId: ESP32_GUARDIAN`, `source: esp32`, `timestamp` con la hora del
    servidor).
 
-## 9. Prueba física obligatoria (Fase 5) — dos teléfonos
+## 9. Prueba física obligatoria (Fase 5/6) — dos teléfonos
 
 Requiere el backend ya desplegado en Render (`backend/README.md`) y
 `local.properties` configurado (sección 7e). Necesitas **dos** teléfonos.
@@ -232,10 +282,16 @@ Requiere el backend ya desplegado en Render (`backend/README.md`) y
    "Registrando dispositivo..." por mucho tiempo o "No se pudo registrar el
    dispositivo", revisa la conexión a Internet de ese teléfono antes de
    seguir — sin un token registrado no hay a quién notificar.
+4. **(Fase 6, nuevo)** Anota el código de 6 caracteres que muestra el
+   Teléfono 2 (ver abajo) en el campo "Código de tu Usuario" → "Vincular" →
+   espera `✓ Vinculado correctamente`. Sin este paso, el backend responde
+   `notified: 0` y no llega ninguna notificación — es el comportamiento
+   correcto (ya no hay broadcast), no un error.
 
 **Teléfono 2 (Usuario)**, con el ESP32 encendido: repite los pasos 1-7 de la
-sección 8. Ahora, además de `Firebase: ✓ Evento enviado correctamente`,
-debe aparecer una segunda sección:
+sección 8. Su código de 6 caracteres aparece arriba de todo, siempre
+visible. Además de `Firebase: ✓ Evento enviado correctamente`, debe
+aparecer una segunda sección:
 
 - `Notificación al Apoderado:` `Enviando...` → `✓ Backend notificado correctamente`
 
@@ -261,3 +317,42 @@ Dispositivo.
 
 Antes de esto, `./gradlew assembleDebug` debe compilar sin errores (con
 `google-services.json` ya colocado en `app/`).
+
+## 10. Probar la vinculación (Fase 6) sin ESP32, con dos emuladores
+
+Los emuladores Android no tienen hardware BLE (ver sección 8), así que la
+parte de "generar el evento" se prueba con `curl` directo contra Render en
+vez del ESP32 real — aísla exactamente la lógica de ruteo nueva.
+
+1. **Borra la colección `apoderadoTokens`** en Firestore Console si tiene
+   documentos de antes de la Fase 6 (ver § 7f — quedan sin `apoderadoId`,
+   inservibles pero no rompen nada).
+2. Emulador **Apoderado** (p. ej. `Pixel_10`) → rol Apoderado → conceder
+   permiso de notificaciones → esperar `✓ Firebase conectado / Dispositivo
+   registrado`.
+3. Emulador **Usuario** (p. ej. `GuardianApp_Test`) → rol Usuario → anotar
+   el código de 6 caracteres que aparece arriba de todo (no depende de BLE).
+4. En el emulador Apoderado, escribir ese código en "Código de tu Usuario"
+   → "Vincular" → esperar `✓ Vinculado correctamente`.
+5. Verificar en Firebase Console: `vinculaciones/<código>` existe con el
+   `apoderadoId` correcto; `apoderadoTokens` tiene ese `apoderadoId` en el
+   token del emulador Apoderado.
+6. Simular el evento directamente contra Render (reemplaza `<código>` y la
+   API key):
+   ```bash
+   curl -X POST https://guardianapp-backend.onrender.com/api/events \
+     -H "Content-Type: application/json" -H "X-API-Key: <tu key>" \
+     -d '{"type":"ESP32_EVENT","message":"EVENTO_TEST","deviceId":"ESP32_GUARDIAN","usuarioId":"<código>"}'
+   ```
+   Esperado: `{"ok":true,"notified":1,...}` y la notificación llega al
+   emulador Apoderado.
+7. **Probar el aislamiento** (sin broadcast): repetir el mismo `curl` con un
+   código inventado que no exista en `vinculaciones` (p. ej. `"usuarioId":"ZZZZZZ"`)
+   → esperado `{"ok":true,"notified":0,"warning":"..."}`, **sin** que llegue
+   ninguna notificación a ningún teléfono.
+8. **Agregar un segundo par sin tocar código**: un tercer emulador/teléfono
+   como Usuario 2 genera su propio código (automático, distinto al de
+   Usuario 1); un cuarto como Apoderado 2 se vincula con ese código nuevo.
+   Queda un segundo par `vinculaciones` totalmente independiente del
+   primero — un evento con el `usuarioId` de Usuario 1 nunca notifica a
+   Apoderado 2, y viceversa.

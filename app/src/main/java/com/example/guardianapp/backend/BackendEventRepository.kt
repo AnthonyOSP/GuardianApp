@@ -47,11 +47,15 @@ class BackendEventRepository(private val context: Context) {
     private var requestSeq = 0
 
     /**
-     * Avisa al backend de un evento nuevo. No lanza excepciones: cualquier
-     * fallo (backend no configurado, sin Internet, timeout, error HTTP)
-     * termina en [notifyState] como [BackendNotifyState.Error].
+     * Avisa al backend de un evento nuevo, identificando a este Usuario con
+     * [usuarioId] (ver [com.example.guardianapp.identity.LocalIdentity]) —
+     * es lo que el backend usa para resolver la vinculación con el
+     * Apoderado correcto (Fase 6) en vez de hacer broadcast. No lanza
+     * excepciones: cualquier fallo (backend no configurado, sin Internet,
+     * timeout, error HTTP) termina en [notifyState] como
+     * [BackendNotifyState.Error].
      */
-    fun notifyEvent(type: String, message: String, deviceId: String) {
+    fun notifyEvent(type: String, message: String, deviceId: String, usuarioId: String) {
         if (message.isBlank()) {
             notifyState = BackendNotifyState.Error("Evento vacío: no se avisó al backend.")
             return
@@ -72,7 +76,7 @@ class BackendEventRepository(private val context: Context) {
         notifyState = BackendNotifyState.Sending
 
         executor.execute {
-            val result = runCatching { postEvent(baseUrl, type, message, deviceId) }
+            val result = runCatching { postEvent(baseUrl, type, message, deviceId, usuarioId) }
             mainHandler.post {
                 if (thisRequest != requestSeq) return@post // respuesta de un envío ya obsoleto
                 notifyState = result.fold(
@@ -84,7 +88,7 @@ class BackendEventRepository(private val context: Context) {
     }
 
     /** Corre en el hilo de [executor]; nunca en el hilo principal. */
-    private fun postEvent(baseUrl: String, type: String, message: String, deviceId: String) {
+    private fun postEvent(baseUrl: String, type: String, message: String, deviceId: String, usuarioId: String) {
         val url = URL(baseUrl.trimEnd('/') + "/api/events")
         val connection = url.openConnection() as HttpURLConnection
         try {
@@ -102,6 +106,7 @@ class BackendEventRepository(private val context: Context) {
                 .put("type", type)
                 .put("message", message)
                 .put("deviceId", deviceId)
+                .put("usuarioId", usuarioId)
                 .toString()
 
             OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { it.write(body) }
