@@ -20,8 +20,9 @@ history — there is no in-repo phase tracker).
 
 - **Phase 3** (done): BLE connection from the Usuario role to an ESP32 test
   peripheral. `UsuarioBleScreen.kt` replaces `RoleHomeScreen` for
-  `Role.USUARIO` only (Apoderado still uses the generic `RoleHomeScreen`
-  unchanged). All BLE logic lives in `app/.../ble/` (`BleManager`,
+  `Role.USUARIO` only (Apoderado still used the generic `RoleHomeScreen`
+  unchanged at this point — Phase 5 later replaced it too and deleted
+  `RoleHomeScreen.kt`, see below). All BLE logic lives in `app/.../ble/` (`BleManager`,
   `BlePermissions`, `BleConstants`, `BleModels`) — the UI only reads
   `BleManager`'s `mutableStateOf` properties and calls `startScan()` /
   `connect()` / `disconnect()`. No coroutines/Flow: BLE callbacks (which run
@@ -54,7 +55,7 @@ history — there is no in-repo phase tracker).
   Idle/Sending/Success/Error under the received-event text.
   - Firestore collection `events`, one document per event: `type`
     (`"ESP32_EVENT"`), `message`, `deviceId` (`"ESP32_GUARDIAN"`, a fixed
-    placeholder — see `FirebaseRepository.DEFAULT_DEVICE_ID`), `source`
+    placeholder — see `EventConstants.DEFAULT_DEVICE_ID`), `source`
     (`"esp32"`), `timestamp` (`FieldValue.serverTimestamp()`, not the phone's
     local clock).
   - `FirebaseRepository.logEvent` never throws outward: it handles Firebase
@@ -77,11 +78,130 @@ history — there is no in-repo phase tracker).
   - Added `INTERNET` / `ACCESS_NETWORK_STATE` permissions to
     `AndroidManifest.xml`.
 
+- **Phase 5** (done): Apoderado gets a notification when the Usuario's BLE
+  event fires. `ApoderadoScreen.kt` replaces `RoleHomeScreen` for
+  `Role.APODERADO` only (`RoleHomeScreen.kt` was deleted — it had no
+  remaining callers once both roles had a dedicated screen). All FCM
+  *receiving* code lives in `app/.../fcm/` (`FcmTokenRepository`,
+  `GuardianFirebaseMessagingService`, `GuardianNotifications`,
+  `GuardianNotificationCenter`, `DeviceRegistrationState`, `NotifiedEvent`).
+  - **Architecture**: Android does **not** trigger FCM by watching Firestore
+    (that was the original plan and was rejected — see chat history — because
+    it would've meant either Firebase Cloud Functions, which requires
+    upgrading to the Blaze billing plan just to *deploy*, or a script that
+    has to keep running somewhere). Instead: `Usuario` → `POST /api/events`
+    (HTTPS, own backend) → backend reads `apoderadoTokens` from Firestore
+    with Admin SDK → FCM. The backend lives in `backend/` (repo root,
+    **separate Node.js/Express project, not part of the Gradle build**,
+    deployed to Render — see `backend/README.md`) and holds the Admin SDK
+    credentials that must never reach Android. Firestore's `events`
+    collection (Phase 4) is unchanged and still written directly from
+    Android — the HTTP call to the backend is a second, independent side
+    effect of the same BLE event, not a replacement for it.
+    ```
+    ESP32 --BLE--> Usuario --+--> Firestore (events, unchanged from Phase 4)
+                              +--> HTTPS POST /api/events --> backend (Render)
+                                     --Admin SDK--> reads apoderadoTokens, sends FCM --> Apoderado
+    ```
+  - `EventConstants.kt` (top-level, not under `firebase/` or `backend/`)
+    holds `EVENT_TYPE`/`DEFAULT_DEVICE_ID` — extracted out of
+    `FirebaseRepository` because `BackendEventRepository` needed the same
+    constants and they're conceptually about the test event, not about
+    either integration.
+  - `app/.../backend/` (Android side): `BackendEventRepository` (same
+    `mutableStateOf`-exposing pattern as the other repositories),
+    `BackendNotifyState`. Deliberately plain `HttpURLConnection` on a
+    single-thread `Executor`, not OkHttp/Retrofit — one small JSON POST
+    doesn't justify a new dependency in a project that's stayed
+    dependency-light throughout. Generous timeouts (connect 20s, read 60s)
+    because Render's free tier sleeps after inactivity and can take 30-50s
+    to wake on the next request.
+  - `BACKEND_BASE_URL` / `BACKEND_API_KEY` are `BuildConfig` fields
+    (`buildFeatures.buildConfig = true`), read from `local.properties`
+    (gitignored) in `app/build.gradle.kts`, defaulting to `""` so the
+    project still compiles before the backend is deployed — see
+    `firebase/README.md` § 7e. Never hardcoded in committed `.kt` source.
+  - `FcmTokenRepository` mirrors `FirebaseRepository`'s pattern (exposes
+    `mutableStateOf`, UI reads it); `isInternetAvailable`/`describeFirebaseError`
+    were extracted from `FirebaseRepository` into `firebase/FirebaseUtils.kt`
+    (both `internal`, module-wide visible) so the two repositories share them.
+  - Temporary Apoderado↔device association (no accounts yet): Firestore
+    collection `apoderadoTokens`, doc ID = the FCM token itself (proof the
+    writer holds that token, without real auth) — see `FcmTokenRepository`
+    doc comment and `firebase/README.md`.
+  - `GuardianNotificationCenter` is a plain Kotlin `object` holding
+    `mutableStateOf<NotifiedEvent?>` — the **one** deliberate exception to
+    "each screen creates its own manager via `remember`", because
+    `FirebaseMessagingService` and `MainActivity.onNewIntent` are instantiated
+    by the OS, not by the Compose tree, so there's no per-screen instance to
+    inject into. Both paths (message arrives in foreground via
+    `onMessageReceived`, or the app is (re)launched by tapping a
+    system-displayed notification, extras read in `MainActivity.onCreate`/
+    `onNewIntent`) funnel into this same singleton so `ApoderadoScreen` only
+    has to read one thing.
+  - `MainActivity` is `launchMode="singleTop"` specifically so tapping a
+    notification while the activity is already alive reuses it via
+    `onNewIntent` instead of recreating it — a fresh instance would reset
+    `selectedRole` to `null` (role still isn't persisted, by design since
+    Phase 2) and bounce the Apoderado back to role selection.
+  - FCM foreground/background behavior (why messages carry both
+    `notification` and `data` payloads, and why `onMessageReceived` only
+    fires in foreground) is documented in
+    `GuardianFirebaseMessagingService`'s class doc comment and
+    `firebase/README.md` § "contrato del mensaje FCM" — that section is the
+    payload contract the backend must match.
+  - Compatibility note: the resolved `firebase-messaging` SDK (25.1.2, from
+    `firebase-bom` 34.18.0) marks `FirebaseMessaging.token` and
+    `FirebaseMessagingService.onNewToken()` `@Deprecated` in favor of a newer
+    `register()`/`onRegistered()`/`onUnregistered()` model (installation-ID
+    based) that's opt-in and off by default. Deliberately kept the classic
+    token API (still fully supported, and what current Firebase docs use)
+    with `@Suppress("DEPRECATION")` — same rationale/precedent as the BLE
+    pre-API-33 GATT surface above. Revisit if Firebase ever removes the old
+    path.
+  - `POST_NOTIFICATIONS` runtime permission requested in `ApoderadoScreen`
+    only on API 33+ (`Build.VERSION.SDK_INT >= TIRAMISU`); below that it's
+    granted at install time. Token registration does not wait on this
+    permission (FCM delivery and the permission are independent — the
+    permission only gates whether Android will *display* a notification).
+  - `firebase/firestore.rules` gained an `apoderadoTokens` match block (same
+    "temporary, no Auth yet" caveat as `events`). The Render backend uses
+    Admin SDK credentials that bypass these rules entirely — it doesn't need
+    an `allow` rule to read tokens or delete stale ones.
+  - **Security, all deliberately temporary and documented as such** (same
+    spirit as the Firestore rules' "no Auth yet" caveat): `backend/`
+    validates requests with a shared-secret header (`X-API-Key` against
+    `EVENTS_API_KEY`), not real authentication — anyone with the key
+    (extractable from the APK, which isn't obfuscated:
+    `optimization.enable = false`) could call the endpoint. Documented in
+    `backend/src/middleware/apiKey.js` and `backend/README.md` as something
+    to replace with Firebase Authentication (Android sends an ID token,
+    backend calls `admin.auth().verifyIdToken(...)`) once accounts exist.
+    Admin SDK credentials (the Firebase service account JSON) are **never**
+    in Android, **never** committed to git (`backend/.gitignore`), and on
+    Render are a **Secret File**, not a plaintext env var (avoids escaping
+    the RSA private key's newlines in a single-line value).
+  - **Multi-user preparation (not yet implemented)**: today there's one test
+    Usuario/ESP32 and the backend broadcasts to *every* doc in
+    `apoderadoTokens` — deliberate, documented temporary behavior (see the
+    `TODO(Fase futura...)` comment in `backend/src/routes/events.js`, which
+    is the exact spot where `deviceId → Usuario → Apoderado → token` must be
+    resolved once real accounts/linking exist, instead of the broadcast).
+    `deviceId` already travels on every event specifically so that payload
+    contract doesn't need to change later.
+  - Compatibility note (backend): the resolved `firebase-admin` npm package
+    (14.3.0) marks the token-based `sendEachForMulticast(MulticastMessage)`
+    overload `@deprecated` in favor of one based on Firebase Installation
+    IDs ("FIDs") — the same underlying shift as the Android
+    `FirebaseMessaging.token` deprecation noted above. Kept the classic
+    token-based overload deliberately, for the same reason.
+
 Still not implemented (explicitly deferred to later phases — don't add unless
-asked): Firebase Cloud Messaging / push notifications, real login/accounts
-(Firebase Authentication), the Apoderado phone, phone-to-phone communication,
-a general-purpose backend/API. Phase 5 is "Firebase Cloud Messaging so the
-Apoderado phone gets notified when an event happens."
+asked): Firebase Authentication, the real Usuario↔Apoderado relationship
+(replacing the `apoderadoTokens` broadcast — see "Multi-user preparation"
+above), a general-purpose backend/API beyond this one small events endpoint,
+sensors, geolocation, SMS/WhatsApp/email. Phase 6 is final testing, fixes,
+and producing the release APK for the university presentation.
 
 `androidx.appcompat` and `com.google.android.material` (the old View-system Material
 Components library) are still declared as dependencies and are what the manifest
@@ -116,6 +236,13 @@ tagged `Fase 1: ...` / `Fase 2: ...`.
   catalog) and referenced via `libs.*` in `app/build.gradle.kts` — add new
   dependencies there rather than hardcoding coordinates in the module build file.
 - `minSdk = 26`, `targetSdk = compileSdk = 37`, Java 11 source/target compatibility.
+- `buildFeatures { buildConfig = true }` (Phase 5) generates `BuildConfig.BACKEND_BASE_URL`
+  / `BACKEND_API_KEY` from `local.properties` (read manually in
+  `app/build.gradle.kts` via `java.util.Properties`, defaulting to `""` if
+  the keys are absent so the project still compiles before the backend is
+  deployed) — this used the classic `defaultConfig { buildConfigField(...) }`
+  API and worked fine alongside AGP 9's newer declarative blocks above; it
+  wasn't necessary to find a declarative equivalent.
 
 ## Common commands
 
@@ -146,18 +273,37 @@ Run all commands from the repo root using the Gradle wrapper.
 Source sets:
 - Application code: `app/src/main/java/com/example/guardianapp` — flat package
   for screens/composables (`MainActivity.kt`, `Role.kt`,
-  `RoleSelectionScreen.kt`, `RoleHomeScreen.kt`, `UsuarioBleScreen.kt`); BLE
-  logic separated into the `ble/` subpackage (`BleManager.kt`,
-  `BlePermissions.kt`, `BleConstants.kt`, `BleModels.kt`); Firebase logic
-  separated into the `firebase/` subpackage (`FirebaseRepository.kt`,
-  `EventUploadState.kt`).
+  `RoleSelectionScreen.kt`, `UsuarioBleScreen.kt`, `ApoderadoScreen.kt`;
+  no `RoleHomeScreen.kt` anymore — deleted in Phase 5 once both roles had a
+  dedicated screen and nothing referenced it) plus `EventConstants.kt`
+  (shared `EVENT_TYPE`/`DEFAULT_DEVICE_ID`, used by both `firebase/` and
+  `backend/` below); BLE logic separated into the `ble/` subpackage
+  (`BleManager.kt`, `BlePermissions.kt`, `BleConstants.kt`, `BleModels.kt`);
+  Firebase/Firestore logic in the `firebase/` subpackage
+  (`FirebaseRepository.kt`, `EventUploadState.kt`, `FirebaseUtils.kt`); FCM
+  *receiving* logic in the `fcm/` subpackage (`FcmTokenRepository.kt`,
+  `GuardianFirebaseMessagingService.kt`, `GuardianNotifications.kt`,
+  `GuardianNotificationCenter.kt`, `DeviceRegistrationState.kt`,
+  `NotifiedEvent.kt`); the HTTP client that talks to the `backend/` project
+  below is in the `backend/` subpackage (`BackendEventRepository.kt`,
+  `BackendNotifyState.kt`) — same subpackage name as the top-level
+  `backend/` Node project one level up, don't confuse the two.
 - JVM unit tests: `app/src/test/java/com/example/guardianapp`
 - Instrumented (on-device) tests: `app/src/androidTest/java/com/example/guardianapp`
 - `esp32/` (repo root, outside `app/`, not part of the Gradle build): Arduino
   sketch + README for the ESP32 BLE test peripheral used in Phase 3.
 - `firebase/` (repo root, outside `app/`, not part of the Gradle build):
   `firestore.rules` (source of truth, published by hand in Firebase Console)
-  + README with the manual Firebase Console setup steps for Phase 4.
+  + README with the manual Firebase Console setup steps (Phases 4-5), the
+  FCM message payload contract, and how to point Android at the deployed
+  backend (`local.properties`).
+- `backend/` (repo root, outside `app/`, **separate Node.js/Express
+  project, not part of the Gradle build, not compiled/run by any
+  `./gradlew` command**): receives `POST /api/events` from the Usuario,
+  reads `apoderadoTokens` from Firestore with Firebase Admin SDK, sends the
+  FCM notification, deployed to Render. See `backend/README.md` for local
+  run and deployment steps. Holds Admin SDK credentials — must never be
+  merged into or imported by the Android app.
 
 ### Running `./gradlew` from a plain terminal
 

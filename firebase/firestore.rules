@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// FASE 4 — GuardianApp.
+// GuardianApp — Fases 4 y 5.
 //
 // Reglas TEMPORALES. Todavía no existe Firebase Authentication, así que no
 // hay forma de verificar quién hace la escritura: cualquiera que tenga la
@@ -12,7 +12,12 @@ rules_version = '2';
 // Esto NO es autenticación ni autorización real. Cuando se implemente
 // Firebase Authentication (fase futura) estas reglas DEBEN reemplazarse por
 // algo que exija `request.auth != null` y, eventualmente, relacione
-// `request.auth.uid` con el dispositivo/usuario dueño del evento.
+// `request.auth.uid` con el dispositivo/usuario dueño del evento o del token.
+//
+// El backend (Cloud Function o script con Admin SDK, Fase 5) usa
+// credenciales administrativas que IGNORAN estas reglas por completo — no
+// necesita una regla `allow` explícita para leer eventos ni para borrar
+// tokens inválidos.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -34,6 +39,28 @@ service cloud.firestore {
         request.resource.data.deviceId is string &&
         request.resource.data.source is string &&
         request.resource.data.timestamp == request.time;
+    }
+
+    // FASE 5 — asociación temporal Apoderado↔dispositivo (ver
+    // FcmTokenRepository.kt y firebase/README.md). El ID del documento es
+    // el propio token FCM: sirve como prueba mínima de que quien escribe
+    // conoce ese token (no puede adivinar/pisar el de otro dispositivo),
+    // sin necesitar cuentas todavía.
+    match /apoderadoTokens/{token} {
+      // Nadie debe poder listar tokens ajenos desde el cliente.
+      allow read: if false;
+
+      // El backend borra tokens inválidos con Admin SDK (bypassa reglas);
+      // el cliente nunca borra explícitamente.
+      allow delete: if false;
+
+      // Crear o re-registrar (mismo token, p. ej. al reabrir la app) el
+      // propio token: el ID del documento debe coincidir con el campo
+      // fcmToken, y `updatedAt` debe ser la hora del servidor.
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['fcmToken', 'updatedAt']) &&
+        request.resource.data.fcmToken == token &&
+        request.resource.data.updatedAt == request.time;
     }
 
     // Todo lo demás queda denegado por defecto (comportamiento implícito de

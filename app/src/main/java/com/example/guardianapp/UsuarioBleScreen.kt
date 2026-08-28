@@ -32,6 +32,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.guardianapp.backend.BackendEventRepository
+import com.example.guardianapp.backend.BackendNotifyState
 import com.example.guardianapp.ble.BleConnectionState
 import com.example.guardianapp.ble.BleManager
 import com.example.guardianapp.ble.BlePermissions
@@ -50,19 +52,32 @@ fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
     val context = LocalContext.current
     val bleManager = remember { BleManager(context) }
     val firebaseRepository = remember { FirebaseRepository(context) }
+    val backendEventRepository = remember { BackendEventRepository(context) }
 
     DisposableEffect(Unit) {
         bleManager.register()
         onDispose {
             bleManager.unregister()
             firebaseRepository.dispose()
+            backendEventRepository.dispose()
         }
     }
 
-    // FASE 4: cada vez que llega un evento BLE nuevo, se reenvía a Firestore.
-    // BleManager no sabe nada de Firebase; solo expone `lastEvent`.
+    // FASE 4 + FASE 5: cada vez que llega un evento BLE nuevo, se dispara en
+    // paralelo (a) el registro en Firestore y (b) el aviso HTTP al backend
+    // propio, que es quien decide a qué Apoderado(s) notificar por FCM. Son
+    // dos llamadas de red independientes: una puede fallar sin afectar a la
+    // otra. BleManager no sabe nada de ninguna de las dos, solo expone
+    // `lastEvent`.
     LaunchedEffect(bleManager.lastEvent) {
-        bleManager.lastEvent?.let { event -> firebaseRepository.logEvent(event.message) }
+        bleManager.lastEvent?.let { event ->
+            firebaseRepository.logEvent(event.message)
+            backendEventRepository.notifyEvent(
+                type = EventConstants.EVENT_TYPE,
+                message = event.message,
+                deviceId = EventConstants.DEFAULT_DEVICE_ID
+            )
+        }
     }
 
     var permissionsGranted by remember {
@@ -128,7 +143,11 @@ fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
                 }
 
                 when (bleManager.connectionState) {
-                    BleConnectionState.CONNECTED -> ConnectedSection(bleManager, firebaseRepository)
+                    BleConnectionState.CONNECTED -> ConnectedSection(
+                        bleManager,
+                        firebaseRepository,
+                        backendEventRepository
+                    )
                     BleConnectionState.CONNECTING -> Text("Conectando...")
                     BleConnectionState.DISCONNECTED -> ScanSection(
                         bleManager = bleManager,
@@ -209,7 +228,11 @@ private fun DiscoveredDeviceRow(discovered: DiscoveredDevice, onConectar: () -> 
 }
 
 @Composable
-private fun ConnectedSection(bleManager: BleManager, firebaseRepository: FirebaseRepository) {
+private fun ConnectedSection(
+    bleManager: BleManager,
+    firebaseRepository: FirebaseRepository,
+    backendEventRepository: BackendEventRepository
+) {
     Text(
         text = bleManager.connectedDeviceName ?: "ESP32 Guardian",
         style = MaterialTheme.typography.titleMedium
@@ -226,6 +249,8 @@ private fun ConnectedSection(bleManager: BleManager, firebaseRepository: Firebas
         Text(text = event.receivedAt, style = MaterialTheme.typography.bodySmall)
         Spacer(modifier = Modifier.height(16.dp))
         FirebaseStatusSection(uploadState = firebaseRepository.uploadState)
+        Spacer(modifier = Modifier.height(16.dp))
+        BackendStatusSection(notifyState = backendEventRepository.notifyState)
     } else {
         Text(text = "Esperando evento del ESP32...", textAlign = TextAlign.Center)
     }
@@ -246,6 +271,22 @@ private fun FirebaseStatusSection(uploadState: EventUploadState) {
         is EventUploadState.Success -> Text(text = "✓ Evento enviado correctamente")
         is EventUploadState.Error -> Text(
             text = "✗ ${uploadState.message}",
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/** FASE 5: muestra el resultado del aviso HTTP al backend (el que dispara FCM al Apoderado). */
+@Composable
+private fun BackendStatusSection(notifyState: BackendNotifyState) {
+    Text(text = "Notificación al Apoderado:", style = MaterialTheme.typography.labelLarge)
+    when (notifyState) {
+        is BackendNotifyState.Idle -> Text(text = "En espera.")
+        is BackendNotifyState.Sending -> Text(text = "Enviando...")
+        is BackendNotifyState.Success -> Text(text = "✓ Backend notificado correctamente")
+        is BackendNotifyState.Error -> Text(
+            text = "✗ ${notifyState.message}",
             color = MaterialTheme.colorScheme.error,
             textAlign = TextAlign.Center
         )

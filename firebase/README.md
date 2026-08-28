@@ -1,4 +1,4 @@
-# Firebase — Fase 4
+# Firebase — Fases 4 y 5
 
 Este directorio no forma parte del build de Gradle (igual que `esp32/`): es
 documentación y la fuente de verdad de las reglas de Firestore, que se
@@ -6,9 +6,17 @@ publican a mano en Firebase Console porque este repo no tiene configurado el
 Firebase CLI/emulador.
 
 GuardianApp usa Cloud Firestore para registrar los eventos que el rol Usuario
-recibe del ESP32 por BLE. Todo el código que habla con Firebase vive en
-`app/src/main/java/com/example/guardianapp/firebase/` (`FirebaseRepository`,
-`EventUploadState`).
+recibe del ESP32 por BLE (Fase 4). Todo el código que habla con Firestore
+vive en `app/src/main/java/com/example/guardianapp/firebase/`
+(`FirebaseRepository`, `EventUploadState`).
+
+Desde la Fase 5, el rol Apoderado recibe una notificación push (FCM) cuando
+eso pasa — ese código vive en `app/src/main/java/com/example/guardianapp/fcm/`
+(quién la recibe) y en `backend/` (quién decide enviarla; ver
+`backend/README.md`, es un proyecto Node.js separado desplegado en Render,
+no forma parte del build de Gradle). Ver § 7d más abajo para el contrato
+entre Android y el backend, y § 7e para configurar Android contra tu backend
+desplegado.
 
 ## 1. Crear el proyecto en Firebase Console
 
@@ -101,9 +109,77 @@ Colección `events`, un documento por evento:
 |---|---|---|
 | `type` | string | `"ESP32_EVENT"` |
 | `message` | string | el mensaje recibido por BLE (p. ej. `"EVENTO_TEST"`) |
-| `deviceId` | string | `"ESP32_GUARDIAN"` (fijo por ahora, ver `FirebaseRepository.DEFAULT_DEVICE_ID`) |
+| `deviceId` | string | `"ESP32_GUARDIAN"` (fijo por ahora, ver `EventConstants.DEFAULT_DEVICE_ID`) |
 | `source` | string | `"esp32"` |
 | `timestamp` | timestamp | generado por el servidor (`FieldValue.serverTimestamp()`) |
+
+## 7b. Fase 5 — republicar las reglas
+
+Las reglas de `firestore.rules` cambiaron en la Fase 5 (se agregó la
+colección `apoderadoTokens`). Repite el paso 6: pega el contenido completo
+actualizado de [`firestore.rules`](./firestore.rules) en Firestore Database →
+Reglas → Publicar. No hace falta ningún otro paso manual en Firebase Console
+para habilitar Cloud Messaging — está disponible automáticamente para
+cualquier app registrada, a diferencia de Firestore que sí hubo que crear
+explícitamente.
+
+## 7c. Fase 5 — estructura de datos adicional
+
+Colección `apoderadoTokens`, un documento por token FCM activo (el ID del
+documento **es** el token):
+
+| Campo | Tipo | Valor |
+|---|---|---|
+| `fcmToken` | string | igual al ID del documento |
+| `updatedAt` | timestamp | generado por el servidor |
+
+Ver el comentario en `FcmTokenRepository.kt` sobre por qué el ID del
+documento es el propio token (asociación temporal sin cuentas todavía).
+
+## 7d. Fase 5 — contrato del mensaje FCM (Android ↔ backend)
+
+Quien envíe la notificación —el backend Node/Express en `backend/`, ver su
+README— debe enviar un mensaje FCM con **ambos** payloads, `notification` y
+`data`, con estas claves exactas — es lo que espera
+`GuardianFirebaseMessagingService.kt` / `MainActivity.kt`:
+
+```text
+notification:
+  title: "Nuevo evento"
+  body:  "Se recibió un evento desde <deviceId>"
+
+data:
+  type:      <el campo "type" del documento de events>
+  message:   <el campo "message" del documento de events>
+  deviceId:  <el campo "deviceId" del documento de events>
+```
+
+Enviar ambos payloads (no solo `data`) es intencional: así Android muestra
+la notificación automáticamente cuando la app está en segundo plano o
+cerrada, sin código adicional (ver el comentario en
+`GuardianFirebaseMessagingService.onMessageReceived`).
+
+## 7e. Fase 5 — conectar Android con el backend de Render
+
+El Usuario avisa al backend por HTTPS (`BackendEventRepository.kt`) además
+de registrar el evento en Firestore (ambas cosas ocurren en paralelo, ver
+`UsuarioBleScreen.kt`). La URL del backend y la API key **no están
+hardcodeadas en el código fuente** — se leen de `local.properties` (raíz del
+proyecto, ya gitignoreado) en tiempo de build (`app/build.gradle.kts` las
+inyecta como `BuildConfig.BACKEND_BASE_URL` / `BuildConfig.BACKEND_API_KEY`).
+
+Una vez desplegado el backend en Render (ver `backend/README.md`), agrega a
+`local.properties`:
+
+```properties
+BACKEND_BASE_URL=https://<tu-servicio>.onrender.com
+BACKEND_API_KEY=<la misma EVENTS_API_KEY que configuraste en Render>
+```
+
+Sin estas dos líneas, la app compila igual (por defecto son strings vacíos)
+pero `UsuarioBleScreen` mostrará "Notificación al Apoderado: ✗ El backend no
+está configurado" — es el comportamiento esperado hasta que despliegues el
+backend, no un error de código.
 
 ## 8. Prueba física obligatoria (Fase 4)
 
@@ -143,6 +219,45 @@ sirviendo para el resto del desarrollo.
    sección 7 (`type: ESP32_EVENT`, `message: EVENTO_TEST`,
    `deviceId: ESP32_GUARDIAN`, `source: esp32`, `timestamp` con la hora del
    servidor).
+
+## 9. Prueba física obligatoria (Fase 5) — dos teléfonos
+
+Requiere el backend ya desplegado en Render (`backend/README.md`) y
+`local.properties` configurado (sección 7e). Necesitas **dos** teléfonos.
+
+**Teléfono 1 (Apoderado)**, antes de generar el evento:
+1. Abre GuardianApp → rol **Apoderado**.
+2. Concede el permiso de notificaciones si lo pide (solo Android 13+).
+3. Debe mostrar `✓ Firebase conectado` / `Dispositivo registrado`. Si dice
+   "Registrando dispositivo..." por mucho tiempo o "No se pudo registrar el
+   dispositivo", revisa la conexión a Internet de ese teléfono antes de
+   seguir — sin un token registrado no hay a quién notificar.
+
+**Teléfono 2 (Usuario)**, con el ESP32 encendido: repite los pasos 1-7 de la
+sección 8. Ahora, además de `Firebase: ✓ Evento enviado correctamente`,
+debe aparecer una segunda sección:
+
+- `Notificación al Apoderado:` `Enviando...` → `✓ Backend notificado correctamente`
+
+Si el backend en Render llevaba un rato dormido, este paso puede tardar
+30-50s — no es un error, es el "despertar" del plan free (ver
+`backend/README.md`).
+
+**De vuelta en el Teléfono 1 (Apoderado)**: debe aparecer la notificación
+del sistema:
+
+```text
+GuardianApp
+Nuevo evento
+Se recibió un evento desde ESP32_GUARDIAN
+```
+
+Probar los tres estados de la app en el Teléfono 2 (Apoderado) como pide el
+enunciado: con la app abierta (se actualiza sola, sin notificación del
+sistema — ver `GuardianFirebaseMessagingService`), en segundo plano, y
+completamente cerrada. En los tres casos debe llegar la notificación; al
+tocarla, debe abrir GuardianApp y mostrar "Último evento" con Tipo/Mensaje/
+Dispositivo.
 
 Antes de esto, `./gradlew assembleDebug` debe compilar sin errores (con
 `google-services.json` ya colocado en `app/`).

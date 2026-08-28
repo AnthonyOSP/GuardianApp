@@ -1,16 +1,14 @@
 package com.example.guardianapp.firebase
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.guardianapp.EventConstants
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.FirebaseFirestoreException
 
 /**
  * FASE 4: registra en Cloud Firestore los eventos que [BleManager][
@@ -41,12 +39,12 @@ class FirebaseRepository(private val context: Context) {
      * fallo (Firebase no configurado, sin Internet, error de Firestore,
      * timeout, evento vacío) se refleja en [uploadState] como [EventUploadState.Error].
      */
-    fun logEvent(message: String, deviceId: String = DEFAULT_DEVICE_ID) {
+    fun logEvent(message: String, deviceId: String = EventConstants.DEFAULT_DEVICE_ID) {
         if (message.isBlank()) {
             uploadState = EventUploadState.Error("Evento vacío: no se envió a Firebase.")
             return
         }
-        if (!isInternetAvailable()) {
+        if (!isInternetAvailable(context)) {
             uploadState = EventUploadState.Error("Sin conexión a Internet. No se pudo enviar el evento.")
             return
         }
@@ -64,7 +62,7 @@ class FirebaseRepository(private val context: Context) {
         armTimeout(thisRequest)
 
         val data = hashMapOf(
-            "type" to EVENT_TYPE,
+            "type" to EventConstants.EVENT_TYPE,
             "message" to message,
             "deviceId" to deviceId,
             "source" to SOURCE,
@@ -83,12 +81,12 @@ class FirebaseRepository(private val context: Context) {
                 .addOnFailureListener { exception ->
                     if (thisRequest == requestSeq) {
                         cancelPendingTimeout()
-                        uploadState = EventUploadState.Error(describeError(exception))
+                        uploadState = EventUploadState.Error(describeFirebaseError(exception))
                     }
                 }
         } catch (e: Exception) {
             cancelPendingTimeout()
-            uploadState = EventUploadState.Error(describeError(e))
+            uploadState = EventUploadState.Error(describeFirebaseError(e))
         }
     }
 
@@ -113,35 +111,9 @@ class FirebaseRepository(private val context: Context) {
         timeoutRunnable = null
     }
 
-    private fun isInternetAvailable(): Boolean {
-        val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
-            ?: return false
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
-
-    private fun describeError(e: Exception): String = when (e) {
-        is FirebaseFirestoreException -> when (e.code) {
-            FirebaseFirestoreException.Code.UNAVAILABLE ->
-                "No se pudo contactar a Firebase. Revisa tu conexión a Internet."
-            FirebaseFirestoreException.Code.PERMISSION_DENIED ->
-                "Firestore rechazó la escritura (revisa las reglas de seguridad)."
-            FirebaseFirestoreException.Code.DEADLINE_EXCEEDED ->
-                "Tiempo de espera agotado al enviar el evento."
-            else -> e.message ?: "Error de Firestore al guardar el evento."
-        }
-        else -> e.message ?: "Error desconocido al enviar el evento a Firebase."
-    }
-
     companion object {
         private const val EVENTS_COLLECTION = "events"
-        private const val EVENT_TYPE = "ESP32_EVENT"
         private const val SOURCE = "esp32"
-
-        /** Identificador fijo del ESP32 de pruebas (Fase 4). No es una MAC; ver README de firebase/. */
-        const val DEFAULT_DEVICE_ID = "ESP32_GUARDIAN"
-
         private const val TIMEOUT_MS = 10_000L
     }
 }
