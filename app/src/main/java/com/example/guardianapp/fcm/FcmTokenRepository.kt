@@ -6,24 +6,27 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.guardianapp.firebase.describeFirebaseError
 import com.example.guardianapp.firebase.isInternetAvailable
+import com.example.guardianapp.identity.LocalIdentity
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 
 /**
- * FASE 5: registra el token FCM de este teléfono (rol Apoderado) en
- * Firestore, para que el backend sepa a qué dispositivo(s) enviar la
- * notificación de un evento nuevo. Mismo patrón que
+ * FASE 5/6: registra el token FCM de este teléfono (rol Apoderado) en
+ * Firestore, etiquetado con el [com.example.guardianapp.identity.LocalIdentity]
+ * de este Apoderado, para que el backend sepa a qué Apoderado específico
+ * enviar la notificación de un evento (sin broadcast, ver
+ * `backend/src/routes/events.js`). Mismo patrón que
  * [com.example.guardianapp.firebase.FirebaseRepository]: expone
  * `mutableStateOf`, la UI ([ApoderadoScreen][com.example.guardianapp.ApoderadoScreen])
  * solo lee [registrationState] y llama a [registerCurrentToken].
  *
- * Asociación temporal Apoderado↔dispositivo (sin cuentas todavía, ver
- * `firebase/README.md`): cada documento en la colección "apoderadoTokens"
- * usa el propio token como ID de documento. No hay "usuario dueño" — es
- * simplemente "estos son los tokens activos que deben recibir avisos".
- * Cuando exista Authentication, el documento pasará a asociarse al UID del
- * Apoderado en vez de auto-identificarse por el valor del token.
+ * Cada documento en "apoderadoTokens" usa el propio token como ID de
+ * documento (prueba mínima de que quien escribe conoce ese token) y lleva
+ * un campo `apoderadoId` (el ID local persistido de este Apoderado, ver
+ * `LocalIdentity`). Cuando exista Firebase Authentication, `apoderadoId`
+ * pasará a ser el `uid` real en vez de un ID generado localmente — el
+ * esquema de Firestore no cambia.
  */
 class FcmTokenRepository(private val context: Context) {
 
@@ -48,7 +51,7 @@ class FcmTokenRepository(private val context: Context) {
      * criterio que `ble/BleManager.kt` con la API GATT pre-API-33.
      */
     @Suppress("DEPRECATION")
-    fun registerCurrentToken() {
+    fun registerCurrentToken(apoderadoId: String) {
         registrationState = DeviceRegistrationState.Registering
 
         val messaging = try {
@@ -60,7 +63,7 @@ class FcmTokenRepository(private val context: Context) {
 
         try {
             messaging.token
-                .addOnSuccessListener { token -> uploadToken(token) }
+                .addOnSuccessListener { token -> uploadToken(token, apoderadoId) }
                 .addOnFailureListener { e ->
                     registrationState = DeviceRegistrationState.Error(
                         "No se pudo obtener el token de notificaciones: ${e.message ?: "error desconocido"}."
@@ -71,7 +74,7 @@ class FcmTokenRepository(private val context: Context) {
         }
     }
 
-    private fun uploadToken(token: String) {
+    private fun uploadToken(token: String, apoderadoId: String) {
         if (token.isBlank()) {
             registrationState = DeviceRegistrationState.Error("El token de notificaciones está vacío.")
             return
@@ -85,7 +88,7 @@ class FcmTokenRepository(private val context: Context) {
             FirebaseFirestore.getInstance()
                 .collection(TOKENS_COLLECTION)
                 .document(token)
-                .set(tokenDocument(token))
+                .set(tokenDocument(token, apoderadoId))
                 .addOnSuccessListener { registrationState = DeviceRegistrationState.Registered }
                 .addOnFailureListener { e ->
                     registrationState = DeviceRegistrationState.Error(describeFirebaseError(e))
@@ -98,8 +101,9 @@ class FcmTokenRepository(private val context: Context) {
     companion object {
         const val TOKENS_COLLECTION = "apoderadoTokens"
 
-        private fun tokenDocument(token: String) = hashMapOf(
+        private fun tokenDocument(token: String, apoderadoId: String) = hashMapOf(
             "fcmToken" to token,
+            "apoderadoId" to apoderadoId,
             "updatedAt" to FieldValue.serverTimestamp()
         )
 
@@ -108,18 +112,20 @@ class FcmTokenRepository(private val context: Context) {
          * [GuardianFirebaseMessagingService.onNewToken], que el sistema
          * dispara fuera del ciclo de vida de cualquier pantalla — por eso
          * no reutiliza una instancia de [FcmTokenRepository] ligada a
-         * `remember`. Falla en silencio (queda registrado solo en logcat):
-         * no hay pantalla visible a la que reportarle el error en ese
-         * momento, y el usuario puede volver a intentarlo reabriendo la
-         * pantalla de Apoderado.
+         * `remember`. El `apoderadoId` se lee directo de [LocalIdentity]
+         * (persistido, no depende de ninguna pantalla abierta). Falla en
+         * silencio (queda registrado solo en logcat): no hay pantalla
+         * visible a la que reportarle el error en ese momento, y el usuario
+         * puede volver a intentarlo reabriendo la pantalla de Apoderado.
          */
         fun uploadTokenFireAndForget(context: Context, token: String) {
             if (token.isBlank() || !isInternetAvailable(context)) return
+            val apoderadoId = LocalIdentity.getOrCreateApoderadoId(context)
             runCatching {
                 FirebaseFirestore.getInstance()
                     .collection(TOKENS_COLLECTION)
                     .document(token)
-                    .set(tokenDocument(token))
+                    .set(tokenDocument(token, apoderadoId))
             }
         }
     }

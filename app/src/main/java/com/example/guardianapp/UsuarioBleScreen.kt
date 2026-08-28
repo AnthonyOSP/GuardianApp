@@ -40,6 +40,7 @@ import com.example.guardianapp.ble.BlePermissions
 import com.example.guardianapp.ble.DiscoveredDevice
 import com.example.guardianapp.firebase.EventUploadState
 import com.example.guardianapp.firebase.FirebaseRepository
+import com.example.guardianapp.identity.LocalIdentity
 
 /**
  * FASE 3, pantalla del rol Usuario: buscar el ESP32 por BLE, conectarse y
@@ -53,6 +54,8 @@ fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
     val bleManager = remember { BleManager(context) }
     val firebaseRepository = remember { FirebaseRepository(context) }
     val backendEventRepository = remember { BackendEventRepository(context) }
+    // FASE 6: identidad anónima persistida de este Usuario (ver LocalIdentity).
+    val usuarioId = remember { LocalIdentity.getOrCreateUsuarioId(context) }
 
     DisposableEffect(Unit) {
         bleManager.register()
@@ -75,7 +78,8 @@ fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
             backendEventRepository.notifyEvent(
                 type = EventConstants.EVENT_TYPE,
                 message = event.message,
-                deviceId = EventConstants.DEFAULT_DEVICE_ID
+                deviceId = EventConstants.DEFAULT_DEVICE_ID,
+                usuarioId = usuarioId
             )
         }
     }
@@ -102,6 +106,15 @@ fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
         Text(text = "GuardianApp", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "Modo Usuario", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(16.dp))
+        // FASE 6: código de vinculación, siempre visible (no depende de BLE).
+        Text(text = "Tu código de Usuario:", style = MaterialTheme.typography.labelLarge)
+        Text(text = usuarioId, style = MaterialTheme.typography.headlineSmall)
+        Text(
+            text = "Compártelo con tu Apoderado para que se vincule desde su teléfono.",
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center
+        )
         Spacer(modifier = Modifier.height(24.dp))
 
         when {

@@ -181,14 +181,6 @@ history — there is no in-repo phase tracker).
     in Android, **never** committed to git (`backend/.gitignore`), and on
     Render are a **Secret File**, not a plaintext env var (avoids escaping
     the RSA private key's newlines in a single-line value).
-  - **Multi-user preparation (not yet implemented)**: today there's one test
-    Usuario/ESP32 and the backend broadcasts to *every* doc in
-    `apoderadoTokens` — deliberate, documented temporary behavior (see the
-    `TODO(Fase futura...)` comment in `backend/src/routes/events.js`, which
-    is the exact spot where `deviceId → Usuario → Apoderado → token` must be
-    resolved once real accounts/linking exist, instead of the broadcast).
-    `deviceId` already travels on every event specifically so that payload
-    contract doesn't need to change later.
   - Compatibility note (backend): the resolved `firebase-admin` npm package
     (14.3.0) marks the token-based `sendEachForMulticast(MulticastMessage)`
     overload `@deprecated` in favor of one based on Firebase Installation
@@ -196,11 +188,74 @@ history — there is no in-repo phase tracker).
     `FirebaseMessaging.token` deprecation noted above. Kept the classic
     token-based overload deliberately, for the same reason.
 
+- **Phase 6** (done): real Usuario↔Apoderado linking — the backend
+  broadcast from Phase 5 is gone. A BLE event now reaches only the
+  Apoderado actually linked to the Usuario that generated it.
+  - **Identity, still without Firebase Authentication**: `usuarioId`
+    (Usuario, a 6-character human-typeable code) and `apoderadoId`
+    (Apoderado, a UUID) are anonymous per-install IDs generated once and
+    persisted in `SharedPreferences` — new file
+    `app/.../identity/LocalIdentity.kt`. This is a deliberate, narrow
+    exception to Phase 2's "don't persist anything" rule: the selected
+    *role* still isn't persisted (`GuardianAppRoot`'s `selectedRole` state
+    is unchanged), only this anonymous pairing identity is. Designed so
+    Firebase Authentication (still not implemented) can later replace *only
+    the source* of these two values with a real `uid` — the Firestore shape
+    (`vinculaciones/{usuarioId}`, `apoderadoTokens.apoderadoId`) doesn't
+    change when that happens.
+  - **Firestore**: new collection `vinculaciones/{usuarioId}` → `{
+    apoderadoId, createdAt }`; `apoderadoTokens/{token}` gained an
+    `apoderadoId` field (written by `FcmTokenRepository`, which now takes
+    `apoderadoId` as a parameter instead of writing just
+    `fcmToken`/`updatedAt`). Old Phase-5 `apoderadoTokens` docs lack
+    `apoderadoId` and are simply unreachable by the new filtered query —
+    harmless but orphaned; `firebase/README.md` § 7f tells the user to
+    delete them before testing this phase.
+  - **Pairing UX**: the 6-char code is generated with an alphabet that
+    excludes ambiguous characters (`0/O`, `1/I`) since a human types it.
+    `UsuarioBleScreen` displays it unconditionally (not gated on BLE
+    connection state). `ApoderadoScreen` gained a text field + "Vincular"
+    button, backed by new `firebase/VinculacionRepository.kt` +
+    `VinculacionState.kt` (same `mutableStateOf`-exposing pattern as every
+    other repository in the project) that writes
+    `vinculaciones/{code} = { apoderadoId, createdAt }`.
+  - **Explicitly documented as NOT a security measure** (per the user's own
+    instruction): the pairing code is a convenience mechanism only —
+    anyone who learns a Usuario's code can link an Apoderado to it. Same
+    caveat as `EVENTS_API_KEY`; both get replaced when Firebase
+    Authentication arrives. See the comment on `vinculaciones` in
+    `firebase/firestore.rules` and `backend/README.md` § "Multi-usuario".
+  - **`backend/src/routes/events.js`**: the old
+    `apoderadoTokens.get()` (broadcast) became `usuarioId` (now a required
+    body field, validated like the others) → `vinculaciones/{usuarioId}.get()`
+    → `apoderadoTokens.where('apoderadoId', '==', apoderadoId).get()`. No
+    vinculación, or a vinculación with no tokens, both return `200 {
+    notified: 0, warning: "..." }` (not an error — same style as Phase 5's
+    "0 tokens" case). No new dependency (`.where()` was already part of the
+    Firestore SDK in use). `firebaseAdmin.js`, `middleware/apiKey.js`,
+    `index.js` untouched.
+  - **`firebase/firestore.rules`**: this phase also fixed a pre-existing
+    file corruption (two stray backtick characters after the closing brace,
+    `  }`` ``, from an earlier bad edit) that would have made the file fail
+    to parse in Firebase Console — unrelated to Phase 6 but discovered
+    while touching this file and fixed as part of it. Rules for
+    `apoderadoTokens` now require `apoderadoId`; new `vinculaciones/{usuarioId}`
+    block blocks all client reads/deletes and validates create/update shape
+    (`apoderadoId is string`, `createdAt == request.time`) — same "no real
+    auth yet" caveat as every other rule in this file.
+  - Verified with an in-memory Firestore/FCM stub injected via
+    `require.cache` (temporary test script, not committed) exercising the
+    real `routes/events.js` route handler end-to-end: unlinked `usuarioId`
+    → `notified: 0`, zero calls to `sendEachForMulticast`; linked
+    `usuarioId` with two Apoderados' tokens present → notifies only the
+    linked Apoderado's token(s), never the other Apoderado's.
+
 Still not implemented (explicitly deferred to later phases — don't add unless
-asked): Firebase Authentication, the real Usuario↔Apoderado relationship
-(replacing the `apoderadoTokens` broadcast — see "Multi-user preparation"
-above), a general-purpose backend/API beyond this one small events endpoint,
-sensors, geolocation, SMS/WhatsApp/email. Phase 6 is final testing, fixes,
+asked): Firebase Authentication (would replace both `EVENTS_API_KEY` and the
+unauthenticated pairing code — see Phase 6 above), a general-purpose
+backend/API beyond this one small events endpoint, sensors, geolocation,
+SMS/WhatsApp/email, QR-code or invitation-based pairing (today's 6-char code
+is deliberately the simple version). The next phase is final testing, fixes,
 and producing the release APK for the university presentation.
 
 `androidx.appcompat` and `com.google.android.material` (the old View-system Material
@@ -280,14 +335,17 @@ Source sets:
   `backend/` below); BLE logic separated into the `ble/` subpackage
   (`BleManager.kt`, `BlePermissions.kt`, `BleConstants.kt`, `BleModels.kt`);
   Firebase/Firestore logic in the `firebase/` subpackage
-  (`FirebaseRepository.kt`, `EventUploadState.kt`, `FirebaseUtils.kt`); FCM
-  *receiving* logic in the `fcm/` subpackage (`FcmTokenRepository.kt`,
+  (`FirebaseRepository.kt`, `EventUploadState.kt`, `FirebaseUtils.kt`,
+  `VinculacionRepository.kt`, `VinculacionState.kt`); FCM *receiving* logic
+  in the `fcm/` subpackage (`FcmTokenRepository.kt`,
   `GuardianFirebaseMessagingService.kt`, `GuardianNotifications.kt`,
   `GuardianNotificationCenter.kt`, `DeviceRegistrationState.kt`,
   `NotifiedEvent.kt`); the HTTP client that talks to the `backend/` project
   below is in the `backend/` subpackage (`BackendEventRepository.kt`,
   `BackendNotifyState.kt`) — same subpackage name as the top-level
-  `backend/` Node project one level up, don't confuse the two.
+  `backend/` Node project one level up, don't confuse the two; anonymous
+  per-install pairing IDs (Phase 6) in the `identity/` subpackage
+  (`LocalIdentity.kt`).
 - JVM unit tests: `app/src/test/java/com/example/guardianapp`
 - Instrumented (on-device) tests: `app/src/androidTest/java/com/example/guardianapp`
 - `esp32/` (repo root, outside `app/`, not part of the Gradle build): Arduino

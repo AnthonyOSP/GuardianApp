@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// GuardianApp — Fases 4 y 5.
+// GuardianApp — Fases 4, 5 y 6.
 //
 // Reglas TEMPORALES. Todavía no existe Firebase Authentication, así que no
 // hay forma de verificar quién hace la escritura: cualquiera que tenga la
@@ -12,12 +12,12 @@ rules_version = '2';
 // Esto NO es autenticación ni autorización real. Cuando se implemente
 // Firebase Authentication (fase futura) estas reglas DEBEN reemplazarse por
 // algo que exija `request.auth != null` y, eventualmente, relacione
-// `request.auth.uid` con el dispositivo/usuario dueño del evento o del token.
+// `request.auth.uid` con el dispositivo/usuario/apoderado dueño del dato.
 //
-// El backend (Cloud Function o script con Admin SDK, Fase 5) usa
-// credenciales administrativas que IGNORAN estas reglas por completo — no
-// necesita una regla `allow` explícita para leer eventos ni para borrar
-// tokens inválidos.
+// El backend (Render, Admin SDK, Fase 5-6) usa credenciales administrativas
+// que IGNORAN estas reglas por completo — no necesita una regla `allow`
+// explícita para leer eventos, leer vinculaciones, ni borrar tokens
+// inválidos.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -41,11 +41,13 @@ service cloud.firestore {
         request.resource.data.timestamp == request.time;
     }
 
-    // FASE 5 — asociación temporal Apoderado↔dispositivo (ver
+    // FASE 5/6 — asociación temporal Apoderado↔dispositivo (ver
     // FcmTokenRepository.kt y firebase/README.md). El ID del documento es
     // el propio token FCM: sirve como prueba mínima de que quien escribe
     // conoce ese token (no puede adivinar/pisar el de otro dispositivo),
-    // sin necesitar cuentas todavía.
+    // sin necesitar cuentas todavía. `apoderadoId` (Fase 6) es el ID local
+    // (SharedPreferences, ver LocalIdentity.kt) del Apoderado dueño de este
+    // token — es lo que usa el backend para no hacer broadcast.
     match /apoderadoTokens/{token} {
       // Nadie debe poder listar tokens ajenos desde el cliente.
       allow read: if false;
@@ -56,11 +58,36 @@ service cloud.firestore {
 
       // Crear o re-registrar (mismo token, p. ej. al reabrir la app) el
       // propio token: el ID del documento debe coincidir con el campo
-      // fcmToken, y `updatedAt` debe ser la hora del servidor.
+      // fcmToken, `apoderadoId` debe venir informado, y `updatedAt` debe
+      // ser la hora del servidor.
       allow create, update: if
-        request.resource.data.keys().hasOnly(['fcmToken', 'updatedAt']) &&
+        request.resource.data.keys().hasOnly(['fcmToken', 'apoderadoId', 'updatedAt']) &&
         request.resource.data.fcmToken == token &&
+        request.resource.data.apoderadoId is string &&
+        request.resource.data.apoderadoId.size() > 0 &&
         request.resource.data.updatedAt == request.time;
+    }
+
+    // FASE 6 — vinculación Usuario↔Apoderado. El ID del documento es el
+    // código de 6 caracteres que muestra UsuarioBleScreen (= usuarioId).
+    // IMPORTANTE (ver chat/CLAUDE.md): este código NO es una medida de
+    // seguridad, es solo un mecanismo de emparejamiento sencillo para esta
+    // fase — cualquiera que lo conozca puede vincularse a ese Usuario. La
+    // mitigación real llega con Firebase Authentication (fase futura), que
+    // reemplazará esta colección/regla por algo atado a `request.auth.uid`.
+    match /vinculaciones/{usuarioId} {
+      // Nadie necesita leer esto desde el cliente — solo el backend
+      // (Admin SDK) para resolver a qué Apoderado notificar.
+      allow read: if false;
+      allow delete: if false;
+
+      // Crear o reemplazar la vinculación de un Usuario (re-vincular a otro
+      // Apoderado sobreescribe la anterior).
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['apoderadoId', 'createdAt']) &&
+        request.resource.data.apoderadoId is string &&
+        request.resource.data.apoderadoId.size() > 0 &&
+        request.resource.data.createdAt == request.time;
     }
 
     // Todo lo demás queda denegado por defecto (comportamiento implícito de
