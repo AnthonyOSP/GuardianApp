@@ -17,6 +17,21 @@ function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+// FASE 8: título de notificación según `type`. Debe coincidir con
+// app/src/main/java/com/example/guardianapp/SimulatedEvent.kt
+// (notificationTitle = "$emoji $label"). El cuerpo para estos tipos
+// conocidos es directamente el `message` que ya manda Android — es
+// exactamente el texto que define SimulatedEvent.kt, así que no se duplica
+// acá. Cualquier `type` que no esté en esta tabla (hoy, el ESP32_EVENT real
+// de las Fases 4-6) conserva el título/cuerpo genérico de siempre, sin
+// cambios de comportamiento.
+const EVENT_TITLES = {
+  EMERGENCY: '🚨 Emergencia',
+  FOOD: '🍽️ Comida',
+  BATHROOM: '🚻 Baño',
+  HELP: '🆘 Ayuda',
+};
+
 router.post('/events', async (req, res) => {
   const body = req.body ?? {};
   const { type, message, deviceId, usuarioId } = body;
@@ -113,12 +128,14 @@ router.post('/events', async (req, res) => {
 
   // Mismo contrato de payload documentado en firebase/README.md § "contrato
   // del mensaje FCM": notification + data, para que Android muestre la
-  // notificación aunque esté en segundo plano o cerrada.
+  // notificación aunque esté en segundo plano o cerrada. El título/cuerpo
+  // dependen de `type` (Fase 8, ver EVENT_TITLES arriba).
+  const knownTitle = EVENT_TITLES[type];
   const multicastMessage = {
     tokens,
     notification: {
-      title: 'Nuevo evento',
-      body: `Se recibió un evento desde ${deviceId}`,
+      title: knownTitle ?? 'Nuevo evento',
+      body: knownTitle ? message : `Se recibió un evento desde ${deviceId}`,
     },
     data: { type, message, deviceId },
   };

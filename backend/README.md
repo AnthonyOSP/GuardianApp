@@ -1,10 +1,10 @@
-# GuardianApp — backend (Fases 5 y 6)
+# GuardianApp — backend (Fases 5, 6 y 8)
 
 Backend HTTP pequeño (Express) que:
 
 1. Recibe `POST /api/events` desde el Android del Usuario cuando llega un evento del ESP32, identificado por su `usuarioId`.
 2. Busca en Firestore a qué Apoderado está vinculado ese Usuario (`vinculaciones/{usuarioId}`, Fase 6 — ver `firebase/README.md` § 7f) y lee **solo** los tokens FCM de ese Apoderado (`apoderadoTokens` filtrado por `apoderadoId`). Ya no hace broadcast a todos los Apoderados registrados (esto era el comportamiento de la Fase 5).
-3. Envía la notificación con Firebase Admin SDK.
+3. Arma el título/cuerpo de la notificación según `type` (tabla `EVENT_TITLES` en `src/routes/events.js`, Fase 8 — debe coincidir con `SimulatedEvent.kt` del lado Android; ver `firebase/README.md` § 7d) y la envía con Firebase Admin SDK.
 4. Borra los tokens que FCM reporte inválidos.
 
 **No escucha Firestore de forma permanente.** Es solo request/response, a propósito: así funciona bien en el plan gratuito de Render, que duerme el servicio tras inactividad y lo despierta con la siguiente petición HTTP — un proceso que necesitara estar "siempre escuchando" no sobreviviría a eso.

@@ -249,14 +249,229 @@ history — there is no in-repo phase tracker).
     → `notified: 0`, zero calls to `sendEachForMulticast`; linked
     `usuarioId` with two Apoderados' tokens present → notifies only the
     linked Apoderado's token(s), never the other Apoderado's.
+  - **Git note**: this phase's work was committed on a separate branch
+    (`relacionUsuarios`) and `main` was later fast-forwarded onto it
+    (`git merge --ff-only`, no merge commit) — if `main` and a feature
+    branch ever look out of sync again, check `git log --oneline --all` /
+    `git reflog` before assuming code was lost or reverted.
+
+- **Phase 7** (done): the Usuario role can generate 4 fixed test events by
+  hand (no ESP32 yet) — `EMERGENCY`, `FOOD`, `BATHROOM`, `HELP`, defined in
+  new `SimulatedEvent.kt` (top-level, next to `EventConstants.kt`/`Role.kt`).
+  Purely a UI feature that reuses the entire Phase 5/6 pipeline
+  unchanged — `ble/` untouched, `backend/` (Node/Render) untouched.
+  - `UsuarioBleScreen` gained an "Enviar alerta" section (4 large buttons,
+    disabled while a send is in flight) shown unconditionally, not gated on
+    BLE connection state — same reasoning as the Phase 6 `usuarioId` code
+    display. Each button calls the *same*
+    `BackendEventRepository.notifyEvent(type, message, deviceId, usuarioId)`
+    used by the real BLE-triggered flow — same repository instance, same
+    `notifyState`, no parallel/second state machine.
+  - `BackendEventRepository` behavior fix (not a signature change): it used
+    to treat any HTTP 2xx as `Success` without reading the response body,
+    so a `{"ok":true,"notified":0}` (Usuario not yet linked to an
+    Apoderado) showed the same "success" text as an actual delivery — now
+    it parses `notified` and only reports `Success` when `notified > 0`;
+    `notified == 0` surfaces as `Error("El Usuario todavía no está
+    vinculado a un Apoderado.")`. Also stopped echoing the raw HTTP
+    error/response body to the user (`401` → "API key inválida o
+    ausente."; anything else → a generic "no se pudo enviar" message) —
+    tightens what Phase 5/6 already documented ("don't show raw
+    stack/response traces to the user").
+  - Known limitation at the time (foreground-only per-event title/emoji,
+    since `events.js` hardcoded generic notification text) — **resolved in
+    Phase 8**, see below.
+
+- **Phase 8** (done): the per-event title/emoji now shows correctly
+  regardless of the Apoderado's app state (foreground/background/killed),
+  and a real (not simulated) bug in the background/killed tap-to-open path
+  got fixed along the way.
+  - **`backend/src/routes/events.js`**: new `EVENT_TITLES` lookup
+    (`EMERGENCY`/`FOOD`/`BATHROOM`/`HELP` → their emoji+label, must stay in
+    sync with `SimulatedEvent.kt`'s `notificationTitle`). For those 4
+    known types, `notification.body` is the incoming `message` field
+    directly (not a duplicated copy of `SimulatedEvent.kt`'s text — avoids
+    drift between the two files). Any other `type` (today, only the real
+    ESP32's `ESP32_EVENT`) keeps the exact Phase 5 generic
+    title/body — verified byte-for-byte unchanged via a temporary in-memory
+    test (same technique as Phase 6's, not committed). `data.type`/
+    `message`/`deviceId`, the response JSON shape, `vinculaciones`/
+    `apoderadoTokens` lookup logic, `middleware/apiKey.js`, and
+    `firebaseAdmin.js` are all untouched.
+  - **Bug found and fixed, not part of what was asked but blocking the
+    phase's own background/killed test goal**: `MainActivity.handleNotificationIntent()`
+    only ever read the `EXTRA_EVENT_*`-namespaced intent extras — which
+    only exist when *our own code* builds the notification's `PendingIntent`
+    (the foreground path, `GuardianNotifications.buildEventNotification`).
+    For background/killed, Android auto-displays the notification and, on
+    tap, launches `MainActivity` with the FCM `data` payload's *raw* keys
+    (`"type"`/`"message"`/`"deviceId"`) as extras — keys that never matched
+    `EXTRA_EVENT_*`. Net effect since Phase 5: tapping a background/killed
+    notification opened the app but silently failed to populate
+    `GuardianNotificationCenter`, so `ApoderadoScreen` never showed "Último
+    evento" for that path. Fixed with a fallback read (`intent.getStringExtra(EXTRA_EVENT_TYPE)
+    ?: intent.getStringExtra("type")`, same for the other two fields) —
+    localized entirely to `MainActivity.kt`, no other file touched for
+    this.
+  - `GuardianFirebaseMessagingService`'s foreground-only `SimulatedEvent`-based
+    title/body computation (added in Phase 7) is now redundant (the server
+    already sends the right text) but harmless — computes the identical
+    string, so it was left in place rather than removed, per this phase's
+    "minimal change" instruction. Its class doc comment was updated to
+    stop describing the now-fixed limitation as current.
+  - Nothing changed in `GuardianNotifications.kt` (channel id/importance/icon),
+    `GuardianNotificationCenter.kt`, `NotifiedEvent.kt`, `AndroidManifest.xml`,
+    or `LocalIdentity.kt` — all already correct for this phase's goals
+    (channel `IMPORTANCE_HIGH`, `POST_NOTIFICATIONS` declared, single
+    channel id shared between the manifest meta-data and
+    `GuardianNotifications.ensureChannel`).
+
+- **UI/UX redesign** (not a numbered "Fase", a visual-only pass done with
+  the `mobile-app-ui-design` skill, iterated twice; zero logic/state/
+  repository changes — same `LaunchedEffect`s, same function signatures,
+  same backend/BLE/FCM wiring throughout):
+  - New `app/.../ui/theme/` package (`Color.kt`, `Theme.kt`) — a real
+    `GuardianAppTheme(darkTheme = isSystemInDarkTheme(), ...)` composable
+    replacing the bare, unbranded `MaterialTheme { }` every screen used
+    since Phase 1 (default Compose purple, and — since nothing ever passed
+    an explicit `colorScheme` — no actual dark-mode support despite
+    `themes.xml`'s legacy `Theme.MaterialComponents.DayNight...` implying
+    there should be one). `MainActivity.setContent` and its `@Preview` now
+    use `GuardianAppTheme` instead of bare `MaterialTheme`.
+  - **v2 palette (current)**: monochrome black/white + one red accent,
+    requested explicitly by the user ("botones en negro", referencing a
+    fintech/crypto-wallet visual style). `ColorScheme.primary` is near-black
+    in light mode / near-white in dark mode (`InkLight`/`InkDark` in
+    `Color.kt`) — since Material3's default `Button`/`OutlinedButton` use
+    `primary` for their fill/border+content color, this alone makes nearly
+    every button in the app render black-on-white (or inverted in dark
+    mode) *without* per-button color overrides. `error` (red) stays the
+    **only** accent color, reserved for the Emergency button and error
+    states (60/30/10 rule from the skill). A fixed "hero" color pair
+    (`HeroContainer`/`HeroOnContainer`, always near-black+white regardless
+    of light/dark theme — a deliberate constant, not theme-inverted like
+    `primary`) is used for the "Tu código de Usuario" card and the role
+    badges in `RoleSelectionScreen`, evoking a wallet-app "balance card".
+    `ButtonShape` (a fully-rounded pill, `RoundedCornerShape(percent = 50)`)
+    is applied explicitly to every `Button`/`OutlinedButton` call site.
+    `successColor()` (green) is unchanged — still not a Material3
+    `ColorScheme` role, resolved separately.
+  - New `app/.../ui/components/Animations.kt`: `Modifier.pressScale(interactionSource)`
+    (a tactile ~5% shrink while a `Button`/`Card` is pressed, via
+    `collectIsPressedAsState()` + `animateFloatAsState` — remember the
+    `getValue`/`setValue` operator imports for the `by` delegate here, easy
+    to forget) and `AnimatedStatus(targetState, content)` (a generic
+    `AnimatedContent` fade+slide wrapper reused by every Idle/Sending/
+    Success/Error status block across all three screens, so state changes
+    animate instead of snapping). Note: `Button`'s `content` lambda has a
+    `RowScope` receiver (`@Composable RowScope.() -> Unit`) — matters if a
+    content lambda is extracted to a local `val` and shared between a
+    `Button` and an `OutlinedButton` call, as `AlertaButton` does.
+  - `RoleSelectionScreen.kt`: two large tappable `Card`s (dark hero badge +
+    title + one-line description, with `pressScale`) instead of two plain
+    `Button`s.
+  - `UsuarioBleScreen.kt` / `ApoderadoScreen.kt`: each functional block
+    (código de vinculación, alertas, conexión BLE / estado de
+    notificaciones, vinculación, último evento) is its own `Card` instead
+    of a flat `Column` separated by `HorizontalDivider()`s. Status text is
+    color-coded (`successColor()` for ✓, `colorScheme.error` for ✗/✕,
+    `onSurfaceVariant` for in-progress/neutral) and wrapped in
+    `AnimatedStatus`. "Cerrar sesión" is an `OutlinedButton` (de-emphasized
+    — it's not either screen's primary action). `SimulatedEvent.kt` has one
+    presentation-only field, `isCritical` (`true` only for `EMERGENCY`) —
+    does **not** travel to the backend, only makes `AlertaButton` render
+    that one button filled with `colorScheme.error` (red, `pressScale`)
+    while the other three render as `OutlinedButton`s (black border/text
+    via `primary`, `pressScale`), so Emergencia visually stands out from
+    Comida/Baño/Ayuda without a second accent color.
+  - No new dependencies: no icon library was added — the app already used
+    emoji as its icon system since Phase 5/7 (🚨🔔✓✕ etc.), which the skill
+    explicitly endorses ("use icons, emojis... to make information
+    digestible"), so the redesign leaned on that instead of adding
+    `material-icons-core`/`-extended`.
+
+- **Phase 9** (done): bottom-tab navigation (Inicio/Historial/Ajustes,
+  `design/guardian-navigation.png` reference — adapted, not copied) for
+  **both** roles — the user explicitly chose this over "Usuario only" or
+  "Apoderado only" after the brief's own text contradicted the reference
+  image about which role "Inicio"/its alert buttons belonged to (worth
+  re-reading the chat if this phase's scope ever looks surprising).
+  - **New packages** (flat, not nested under `ui/`, per the user's requested
+    `navigation/`/`screens/`/`components/` shape): `navigation/` (`AppTab.kt`,
+    `BottomNavBar.kt` — a plain `enum` + `when`, no `androidx.navigation`
+    dependency added, same reasoning Phase 2 used for the original role
+    switch: sibling screens, no back-stack/args/deep-link need) and
+    `screens/usuario/`, `screens/apoderado/` (3 screens each: `*InicioScreen.kt`,
+    `*HistorialScreen.kt`, `*AjustesScreen.kt`). Shared list/card/status
+    building blocks went into the **existing** `ui/components/` (not a new
+    top-level `components/`) since that package already existed for exactly
+    this purpose (`Animations.kt`, from the redesign pass) — extended with
+    `SectionCard.kt` (promoted out of a private copy that used to live only
+    in `ApoderadoScreen.kt`), `SettingsRow.kt`, `HistorialEntryCard.kt`,
+    `FilterChipsRow.kt`, `EventCategory.kt` (emoji+color per event `type`,
+    the one place in the app with more than the primary/error accents —
+    category tags on an otherwise-monochrome list, not a theme change), and
+    `DateGrouping.kt` (pure Kotlin, no Compose — groups a
+    newest-first-sorted list into "Hoy"/"Ayer"/date via `java.time`, native
+    since API 26, no desugaring needed).
+  - `UsuarioBleScreen.kt` / `ApoderadoScreen.kt` are now thin "hosts": they
+    still own every repository/singleton `remember{}`, the BLE
+    `DisposableEffect`, and the BLE-event `LaunchedEffect` **completely
+    unchanged**, plus a `var selectedTab by remember { mutableStateOf(AppTab.INICIO) }`
+    and a `Scaffold(bottomBar = { BottomNavBar(...) })` that dispatches to
+    the 3 screens per role. Because the repositories live *above* the
+    `when(selectedTab)`, switching tabs never recreates BLE/FCM/vinculación
+    state — only per-tab UI state (e.g. a selected filter chip) resets on
+    revisit, a deliberate, documented trade-off of not using
+    `androidx.navigation`. `MainActivity.kt` did not need to change at all
+    (still calls `UsuarioBleScreen(onCerrarSesion=...)` /
+    `ApoderadoScreen(onCerrarSesion=...)` exactly as before).
+  - **Historial — the minimal-modification analysis the user asked for
+    before writing code**: `events` in Firestore has `allow read: if false`
+    (no client can query it) and doesn't even record which Usuario/Apoderado
+    a document belongs to — reconstructing history from there would have
+    needed a rules change *and* a schema change, i.e. not minimal, and the
+    user explicitly vetoed inventing new persistence without justifying it
+    first. Instead, both histories are built from data the app already
+    computes on-device: `GuardianNotificationCenter` (Apoderado — every FCM
+    event the phone was ever told about, Phase 5) gained a `history: List<NotifiedEvent>`
+    (`mutableStateListOf`, newest-first) alongside the pre-existing
+    `lastEvent`, appended in the same `onEventReceived` both existing call
+    sites (`GuardianFirebaseMessagingService`, `MainActivity`) already call
+    — neither needed to change. `BackendEventRepository` (Usuario — every
+    alert *this device sent*, Phase 5/7) gained `sentHistory: List<SentEvent>`
+    the same way, recorded through one new private `setTerminalState(type,
+    message, state)` that replaced the repeated `notifyState = ...`
+    assignments in `notifyEvent()` (still the exact same states, same
+    method signature, same HTTP call). `NotifiedEvent` gained a
+    `receivedAtMillis: Long = System.currentTimeMillis()` field with a
+    default value specifically so its two existing constructor call sites
+    didn't need to change.
+  - **Known, accepted limitation** (documented in both files' doc comments):
+    both histories live in memory only — they reset if the process dies
+    (not just backgrounded), since neither is persisted. The natural next
+    step, if durability across restarts is wanted, is `SharedPreferences`
+    (same mechanism `LocalIdentity.kt` already uses) — not implemented now,
+    to keep this phase's change to "the minimum necessary," per the user's
+    own instruction.
+  - Filter chips (`FilterChipsRow`, Material3 `FilterChip`, no new
+    dependency) use `SimulatedEvent?` as the filter value (`null` = "Todos")
+    on both Historial screens — an event whose `type` isn't one of the 4
+    known ones (e.g. a real future `ESP32_EVENT`) always shows under
+    "Todos" with the generic 🔔/"Evento" fallback from `categoryFor()`,
+    never matches a specific chip.
 
 Still not implemented (explicitly deferred to later phases — don't add unless
 asked): Firebase Authentication (would replace both `EVENTS_API_KEY` and the
 unauthenticated pairing code — see Phase 6 above), a general-purpose
 backend/API beyond this one small events endpoint, sensors, geolocation,
 SMS/WhatsApp/email, QR-code or invitation-based pairing (today's 6-char code
-is deliberately the simple version). The next phase is final testing, fixes,
-and producing the release APK for the university presentation.
+is deliberately the simple version), real ESP32/BLE-triggered simulated
+events (Phase 7's buttons are a stand-in until the hardware exists), an admin
+panel, `androidx.navigation` (still a plain enum + `when`, see Phase 9),
+persisted history across app restarts (Phase 9's history is in-memory only
+— see the "known, accepted limitation" note there). The next phase is final
+testing, fixes, and producing the release APK for the university presentation.
 
 `androidx.appcompat` and `com.google.android.material` (the old View-system Material
 Components library) are still declared as dependencies and are what the manifest
@@ -332,7 +547,10 @@ Source sets:
   no `RoleHomeScreen.kt` anymore — deleted in Phase 5 once both roles had a
   dedicated screen and nothing referenced it) plus `EventConstants.kt`
   (shared `EVENT_TYPE`/`DEFAULT_DEVICE_ID`, used by both `firebase/` and
-  `backend/` below); BLE logic separated into the `ble/` subpackage
+  `backend/` below) and `SimulatedEvent.kt` (Phase 7, the 4 test-alert
+  types for the "Enviar alerta" buttons — unrelated to `EventConstants.kt`:
+  that one describes the real ESP32 event, this one describes the manual
+  stand-ins used until the hardware exists); BLE logic separated into the `ble/` subpackage
   (`BleManager.kt`, `BlePermissions.kt`, `BleConstants.kt`, `BleModels.kt`);
   Firebase/Firestore logic in the `firebase/` subpackage
   (`FirebaseRepository.kt`, `EventUploadState.kt`, `FirebaseUtils.kt`,
@@ -342,10 +560,16 @@ Source sets:
   `GuardianNotificationCenter.kt`, `DeviceRegistrationState.kt`,
   `NotifiedEvent.kt`); the HTTP client that talks to the `backend/` project
   below is in the `backend/` subpackage (`BackendEventRepository.kt`,
-  `BackendNotifyState.kt`) — same subpackage name as the top-level
-  `backend/` Node project one level up, don't confuse the two; anonymous
-  per-install pairing IDs (Phase 6) in the `identity/` subpackage
-  (`LocalIdentity.kt`).
+  `BackendNotifyState.kt`, `SentEvent.kt` — actually a top-level class in
+  `BackendEventRepository.kt`, not its own file) — same subpackage name as
+  the top-level `backend/` Node project one level up, don't confuse the
+  two; anonymous per-install pairing IDs (Phase 6) in the `identity/`
+  subpackage (`LocalIdentity.kt`); Phase 9 added `navigation/` (`AppTab.kt`,
+  `BottomNavBar.kt`), `screens/usuario/` + `screens/apoderado/` (3 screens
+  each: Inicio/Historial/Ajustes), and extended the existing `ui/theme/`
+  (Phase 8 redesign) with `ui/components/` — now `Animations.kt` plus
+  `SectionCard.kt`, `SettingsRow.kt`, `HistorialEntryCard.kt`,
+  `FilterChipsRow.kt`, `EventCategory.kt`, `DateGrouping.kt`.
 - JVM unit tests: `app/src/test/java/com/example/guardianapp`
 - Instrumented (on-device) tests: `app/src/androidTest/java/com/example/guardianapp`
 - `esp32/` (repo root, outside `app/`, not part of the Gradle build): Arduino

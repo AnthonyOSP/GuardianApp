@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -17,6 +18,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.example.guardianapp.fcm.GuardianNotificationCenter
 import com.example.guardianapp.fcm.GuardianNotifications
 import com.example.guardianapp.fcm.NotifiedEvent
+import com.example.guardianapp.ui.theme.GuardianAppTheme
 
 /**
  * FASE 2: selección de rol (Usuario / Apoderado) y pantallas locales
@@ -39,7 +41,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         handleNotificationIntent(intent)
         setContent {
-            MaterialTheme {
+            GuardianAppTheme {
                 GuardianAppRoot()
             }
         }
@@ -52,9 +54,25 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleNotificationIntent(intent: Intent?) {
-        val type = intent?.getStringExtra(GuardianNotifications.EXTRA_EVENT_TYPE)
-        val message = intent?.getStringExtra(GuardianNotifications.EXTRA_EVENT_MESSAGE)
-        val deviceId = intent?.getStringExtra(GuardianNotifications.EXTRA_EVENT_DEVICE_ID)
+        if (intent == null) return
+        // FASE 8 — dos orígenes posibles para estos extras, según en qué
+        // estado estaba la app cuando se tocó la notificación:
+        // - Primer plano: nuestro código construyó el PendingIntent con las
+        //   claves EXTRA_EVENT_* (ver GuardianNotifications.buildEventNotification).
+        // - Segundo plano/cerrada: el sistema mostró la notificación solo,
+        //   sin pasar por nuestro código, y al tocarla entrega el payload
+        //   `data` del mensaje FCM tal cual como extras — con las claves
+        //   ORIGINALES ("type"/"message"/"deviceId", ver
+        //   backend/src/routes/events.js), no las EXTRA_EVENT_* de arriba.
+        //   Sin este fallback, tocar una notificación con la app en
+        //   segundo plano/cerrada abría GuardianApp pero no mostraba el
+        //   evento en ApoderadoScreen (bug encontrado en la Fase 8).
+        val type = intent.getStringExtra(GuardianNotifications.EXTRA_EVENT_TYPE)
+            ?: intent.getStringExtra("type")
+        val message = intent.getStringExtra(GuardianNotifications.EXTRA_EVENT_MESSAGE)
+            ?: intent.getStringExtra("message")
+        val deviceId = intent.getStringExtra(GuardianNotifications.EXTRA_EVENT_DEVICE_ID)
+            ?: intent.getStringExtra("deviceId")
         if (!type.isNullOrBlank() && !message.isNullOrBlank() && !deviceId.isNullOrBlank()) {
             GuardianNotificationCenter.onEventReceived(NotifiedEvent(type, message, deviceId))
         }
@@ -65,8 +83,17 @@ class MainActivity : ComponentActivity() {
 fun GuardianAppRoot() {
     var selectedRole by remember { mutableStateOf<Role?>(null) }
 
+    // safeDrawingPadding(): desde que el proyecto apunta a API 35+, Android
+    // dibuja el contenido edge-to-edge por defecto (debajo de la barra de
+    // estado y del recorte de cámara), y ninguna pantalla compensaba eso —
+    // el título "GuardianApp" quedaba tapado por el recorte de la cámara en
+    // equipos con notch/punch-hole. Se aplica una sola vez acá, en la raíz,
+    // para que alcance a las tres pantallas (selección de rol, Usuario,
+    // Apoderado) sin duplicarlo en cada una.
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .safeDrawingPadding(),
         color = MaterialTheme.colorScheme.background
     ) {
         val role = selectedRole
@@ -81,7 +108,7 @@ fun GuardianAppRoot() {
 @Preview(showBackground = true)
 @Composable
 fun GuardianAppRootPreview() {
-    MaterialTheme {
+    GuardianAppTheme {
         GuardianAppRoot()
     }
 }

@@ -140,7 +140,7 @@ documento **es** el token):
 Ver el comentario en `FcmTokenRepository.kt` sobre por qué el ID del
 documento es el propio token (asociación temporal sin cuentas todavía).
 
-## 7d. Fase 5 — contrato del mensaje FCM (Android ↔ backend)
+## 7d. Fases 5/8 — contrato del mensaje FCM (Android ↔ backend)
 
 Quien envíe la notificación —el backend Node/Express en `backend/`, ver su
 README— debe enviar un mensaje FCM con **ambos** payloads, `notification` y
@@ -149,19 +149,31 @@ README— debe enviar un mensaje FCM con **ambos** payloads, `notification` y
 
 ```text
 notification:
-  title: "Nuevo evento"
-  body:  "Se recibió un evento desde <deviceId>"
+  title: <según type, ver tabla EVENT_TITLES en events.js>
+  body:  <el mismo "message" del evento, para los 4 tipos conocidos>
 
 data:
-  type:      <el campo "type" del documento de events>
-  message:   <el campo "message" del documento de events>
-  deviceId:  <el campo "deviceId" del documento de events>
+  type:      <el mismo campo "type" que llegó en el POST>
+  message:   <el mismo campo "message" que llegó en el POST>
+  deviceId:  <el mismo campo "deviceId" que llegó en el POST>
 ```
 
+Desde la Fase 8, `title`/`body` **dependen del `type`** (tabla `EVENT_TITLES`
+en `backend/src/routes/events.js`, debe coincidir con
+`SimulatedEvent.kt` del lado Android):
+
+| `type` | `notification.title` | `notification.body` |
+|---|---|---|
+| `EMERGENCY` | `🚨 Emergencia` | el `message` recibido |
+| `FOOD` | `🍽️ Comida` | el `message` recibido |
+| `BATHROOM` | `🚻 Baño` | el `message` recibido |
+| `HELP` | `🆘 Ayuda` | el `message` recibido |
+| cualquier otro (ej. `ESP32_EVENT`, el evento real del ESP32) | `Nuevo evento` | `Se recibió un evento desde <deviceId>` (comportamiento genérico de la Fase 5, sin cambios) |
+
 Enviar ambos payloads (no solo `data`) es intencional: así Android muestra
-la notificación automáticamente cuando la app está en segundo plano o
-cerrada, sin código adicional (ver el comentario en
-`GuardianFirebaseMessagingService.onMessageReceived`).
+la notificación automáticamente, **con el título/cuerpo ya correctos por
+tipo**, cuando la app está en segundo plano o cerrada, sin código adicional
+(ver el comentario en `GuardianFirebaseMessagingService.onMessageReceived`).
 
 ## 7e. Fase 5 — conectar Android con el backend de Render
 
@@ -356,3 +368,33 @@ vez del ESP32 real — aísla exactamente la lógica de ruteo nueva.
    Queda un segundo par `vinculaciones` totalmente independiente del
    primero — un evento con el `usuarioId` de Usuario 1 nunca notifica a
    Apoderado 2, y viceversa.
+
+## 11. Probar los 4 eventos simulados en segundo plano/cerrada (Fase 8)
+
+Desde la Fase 7, `UsuarioBleScreen` tiene botones ("Enviar alerta") que
+generan `EMERGENCY`/`FOOD`/`BATHROOM`/`HELP` sin necesitar ESP32. Esta
+prueba confirma que, desde la Fase 8, cada uno produce su notificación
+correcta —título y cuerpo, no el texto genérico— sin importar en qué estado
+esté la app del Apoderado.
+
+1. Usuario y Apoderado ya vinculados (secciones 9/10).
+2. **App abierta**: en Usuario, tocar `🚨 Emergencia`. En Apoderado debe
+   aparecer `🚨 Emergencia` / `El Usuario ha enviado una alerta de
+   emergencia.` (se actualiza sola, sin notificación del sistema — la app
+   en primer plano construye la notificación con
+   `GuardianFirebaseMessagingService`).
+3. **App en segundo plano**: enviar a la pantalla de inicio la app del
+   Apoderado (sin cerrarla) y repetir con `🍽️ Comida` desde Usuario. Debe
+   aparecer una notificación real de Android: `🍽️ Comida` / `El Usuario
+   necesita comida.` — ya no el texto genérico de la Fase 5, porque desde
+   esta fase `events.js` arma el título/cuerpo según `type` (ver § 7d).
+4. **App completamente cerrada** (deslizar para cerrarla del todo, no solo
+   minimizarla): repetir con `🚻 Baño`. Debe llegar igual la notificación
+   con el texto correcto.
+5. **Tocar la notificación** de cualquiera de los pasos 3/4: debe abrir
+   GuardianApp y, en la pantalla de Apoderado, mostrar "Último evento" con
+   el Tipo/Mensaje/Dispositivo correctos. Si esto no pasa (la app abre pero
+   no muestra el evento), es la regresión que se corrigió en
+   `MainActivity.kt` en esta fase — confirmá que estás en esta versión del
+   código.
+6. Repetir el paso 3 o 4 con `🆘 Ayuda` para completar los 4 tipos.
