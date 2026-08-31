@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.example.guardianapp.SimulatedEvent
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -29,6 +30,16 @@ import com.google.firebase.messaging.RemoteMessage
  * [GuardianNotificationCenter] queda actualizado apenas la pantalla de
  * Apoderado puede leerlo (directo aquí si está en primer plano; desde los
  * extras del Intent en `MainActivity` si no).
+ *
+ * FASE 8: desde esta fase, `backend/src/routes/events.js` ya arma
+ * `notification.title`/`body` según `data.type` (tabla `EVENT_TITLES`, ver
+ * ese archivo) — por eso el límite que existía en la Fase 7 (el título por
+ * tipo de evento solo se veía con la app en primer plano) ya no aplica: en
+ * segundo plano/cerrada, Android muestra directamente lo que manda el
+ * backend, que ya es correcto por tipo. El cálculo de `title`/`body` de
+ * abajo (usando [SimulatedEvent]) queda como algo redundante pero
+ * inofensivo para el caso primer plano — calcula exactamente el mismo
+ * texto que ya viene en `notification`, así que no hace falta quitarlo.
  */
 class GuardianFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -63,8 +74,14 @@ class GuardianFirebaseMessagingService : FirebaseMessagingService() {
         GuardianNotificationCenter.onEventReceived(event)
 
         val notification = message.notification ?: return
-        val title = notification.title ?: "Nuevo evento"
-        val body = notification.body ?: "Se recibió un evento desde $deviceId"
+        // FASE 7: si el tipo corresponde a uno de los botones de "Enviar
+        // alerta", el título/cuerpo reflejan ese evento en vez del texto
+        // genérico que manda hoy el backend (ver nota de límite conocido en
+        // el doc de la clase). Para el evento real del ESP32 (`ESP32_EVENT`,
+        // Fase 4/5/6), fromType(type) da `null` y el comportamiento no cambia.
+        val simulatedEvent = SimulatedEvent.fromType(type)
+        val title = simulatedEvent?.notificationTitle ?: notification.title ?: "Nuevo evento"
+        val body = simulatedEvent?.let { eventMessage } ?: notification.body ?: "Se recibió un evento desde $deviceId"
 
         if (!hasNotificationPermission()) {
             // Permiso denegado (solo posible desde Android 13/API 33):
