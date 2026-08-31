@@ -65,6 +65,13 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    // FASE 9 (retoque UI): set curado de íconos de Material para la barra
+    // inferior — trae Icons.Default.Home y Icons.Default.Settings. NO se usa
+    // material-icons-extended (pesa ~+8 MB en el APK debug, con R8 apagado):
+    // el ícono "History" se define como ImageVector local en
+    // ui/icons/GuardianIcons.kt. Sin versión: la fija el compose-bom de
+    // arriba, igual que androidx-ui / material3.
+    implementation(libs.androidx.compose.material.icons.core)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.messaging)

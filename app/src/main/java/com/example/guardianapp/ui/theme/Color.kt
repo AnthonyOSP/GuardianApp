@@ -76,3 +76,17 @@ val SuccessGreenDark = Color(0xFF4ADE80)
 val CategoryOrange = Color(0xFFEA8C1E)
 val CategoryBlue = Color(0xFF2563EB)
 val CategoryGreen = Color(0xFF16A34A)
+
+// EmergencyCard (ui/components/EmergencyCard.kt): la acción crítica del
+// Usuario con un tratamiento visual premium. Es un bloque de aspecto FIJO
+// —no se invierte con el modo claro/oscuro—, mismo criterio que la tarjeta
+// "hero" del código de Usuario: una alerta de emergencia debe verse
+// idéntica e inequívoca siempre. El tono medio del degradado rojo es
+// `ErrorRedLight` (#E53E3E), el mismo rojo de `error` del tema.
+val EmergencyCardSurface = Color(0xFFFFFFFF) // tarjeta blanca
+val EmergencyNavy = Color(0xFF071735)        // título "Emergencia"
+val EmergencySlate = Color(0xFF68738A)       // subtítulo "Enviar alerta inmediata"
+val EmergencyRingOuter = Color(0xFFFFE7E4)   // aro externo del círculo (rosa muy claro)
+val EmergencyRingMid = Color(0xFFF7B7B1)     // aro intermedio (profundidad)
+val EmergencyRedBright = Color(0xFFFF6A61)   // luz del degradado rojo (arriba)
+val EmergencyRedDeep = Color(0xFFB81D14)     // sombra del degradado rojo (abajo) + glow

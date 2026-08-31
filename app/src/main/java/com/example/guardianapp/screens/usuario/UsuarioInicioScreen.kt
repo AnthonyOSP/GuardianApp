@@ -48,6 +48,7 @@ import com.example.guardianapp.ble.DiscoveredDevice
 import com.example.guardianapp.firebase.EventUploadState
 import com.example.guardianapp.firebase.FirebaseRepository
 import com.example.guardianapp.ui.components.AnimatedStatus
+import com.example.guardianapp.ui.components.EmergencyCard
 import com.example.guardianapp.ui.components.categoryFor
 import com.example.guardianapp.ui.components.pressScale
 import com.example.guardianapp.ui.theme.ButtonShape
@@ -100,6 +101,24 @@ fun UsuarioInicioScreen(
 
         // FASE 6: código de vinculación, siempre visible (no depende de BLE).
         CodigoUsuarioCard(usuarioId = usuarioId)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Acción crítica destacada. Dispara EXACTAMENTE el mismo camino que
+        // las demás alertas (Fase 5/7): BackendEventRepository.notifyEvent
+        // con SimulatedEvent.EMERGENCY. Se deshabilita mientras hay un envío
+        // en curso; el resultado (Enviando/✓/✕) aparece en "Accesos
+        // rápidos" abajo, que comparte el mismo notifyState.
+        EmergencyCard(
+            onEmergencyClick = {
+                backendEventRepository.notifyEvent(
+                    type = SimulatedEvent.EMERGENCY.type,
+                    message = SimulatedEvent.EMERGENCY.message,
+                    deviceId = EventConstants.DEFAULT_DEVICE_ID,
+                    usuarioId = usuarioId
+                )
+            },
+            enabled = backendEventRepository.notifyState !is BackendNotifyState.Sending
+        )
         Spacer(modifier = Modifier.height(16.dp))
 
         // FASE 7: simula desde Android los eventos que más adelante enviará
@@ -370,10 +389,12 @@ private fun BackendStatusSection(notifyState: BackendNotifyState) {
  * podría generar. Cada tarjeta dispara el mismo camino que en el futuro
  * disparará BLE: [BackendEventRepository.notifyEvent]. Se deshabilitan
  * mientras hay un envío en curso para evitar toques duplicados accidentales.
- * Se muestran en una grilla de 2x2, como tarjetas de información —no
- * botones rellenos— con una insignia circular de color por categoría
- * (misma paleta que `ui/components/EventCategory.kt` usa en el Historial),
- * igual que `design/guardian-navigation.png` § "Accesos rápidos".
+ * Se muestran como tarjetas de información —no botones rellenos— con una
+ * insignia circular de color por categoría (misma paleta que
+ * `ui/components/EventCategory.kt` usa en el Historial), igual que
+ * `design/guardian-navigation.png` § "Accesos rápidos". Emergencia queda
+ * fuera de esta grilla: tiene su propia tarjeta destacada ([EmergencyCard])
+ * arriba, así que aquí sólo se listan los eventos no críticos.
  */
 @Composable
 private fun AlertaSection(
@@ -381,6 +402,7 @@ private fun AlertaSection(
     onEventoClick: (SimulatedEvent) -> Unit
 ) {
     val enviando = notifyState is BackendNotifyState.Sending
+    val eventos = SimulatedEvent.entries.filter { !it.isCritical }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -393,7 +415,7 @@ private fun AlertaSection(
         ) {
             Text(text = "Accesos rápidos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
-            SimulatedEvent.entries.chunked(2).forEach { fila ->
+            eventos.chunked(2).forEach { fila ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -408,6 +430,9 @@ private fun AlertaSection(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    // Fila incompleta (nº impar de eventos): mantiene el
+                    // último tile a media anchura en vez de estirarlo.
+                    if (fila.size < 2) Spacer(modifier = Modifier.weight(1f))
                 }
                 Spacer(modifier = Modifier.height(12.dp))
             }
