@@ -1,11 +1,10 @@
 package com.example.guardianapp.screens.usuario
 
-import android.bluetooth.BluetoothAdapter
 import android.content.Context
-import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,22 +16,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,25 +43,34 @@ import com.example.guardianapp.backend.BackendEventRepository
 import com.example.guardianapp.backend.BackendNotifyState
 import com.example.guardianapp.ble.BleConnectionState
 import com.example.guardianapp.ble.BleManager
-import com.example.guardianapp.ble.BlePermissions
-import com.example.guardianapp.ble.DiscoveredDevice
-import com.example.guardianapp.firebase.EventUploadState
 import com.example.guardianapp.firebase.FirebaseRepository
 import com.example.guardianapp.ui.components.AnimatedStatus
-import com.example.guardianapp.ui.components.EmergencyTile
+import com.example.guardianapp.ui.components.CategoryIcon
+import com.example.guardianapp.ui.components.GuardianActionCard
+import com.example.guardianapp.ui.components.GuardianCard
+import com.example.guardianapp.ui.components.GuardianHeroStyle
+import com.example.guardianapp.ui.components.GuardianIconButton
+import com.example.guardianapp.ui.components.GuardianLogoBadge
+import com.example.guardianapp.ui.components.GuardianSectionTitle
+import com.example.guardianapp.ui.components.GuardianStatusCard
+import com.example.guardianapp.ui.components.GuardianTopBar
 import com.example.guardianapp.ui.components.categoryFor
+import com.example.guardianapp.ui.components.contentColor
 import com.example.guardianapp.ui.components.pressScale
-import com.example.guardianapp.ui.theme.ButtonShape
+import com.example.guardianapp.ui.icons.GuardianIcons
 import com.example.guardianapp.ui.theme.successColor
 
 /**
- * FASE 9, pestaña "Inicio" del Usuario: código de vinculación, las 4
- * acciones rápidas (Fase 7) y la conexión BLE con el ESP32 (Fase 3). Es el
- * mismo contenido que antes vivía directo en `UsuarioBleScreen.kt`, ahora
- * como una pestaña de la navegación inferior — `UsuarioBleScreen` sigue
- * siendo quien crea `BleManager`/`FirebaseRepository`/`BackendEventRepository`
- * y dispara el `LaunchedEffect` del evento BLE (sin cambios ahí), y los
- * pasa acá ya listos.
+ * Pestaña "Inicio" del Usuario, rediseñada sobre
+ * `design/guardianapp-ui-reference.png`: tarjeta del código de vinculación,
+ * las 4 acciones rápidas (Fase 7) y un resumen (no el detalle completo,
+ * movido a [UsuarioConectarScreen]) de la conexión BLE con el ESP32
+ * (Fase 3). Es el mismo contenido/estado que antes vivía directo en
+ * `UsuarioBleScreen.kt`, ahora como una pestaña de la navegación inferior —
+ * `UsuarioBleScreen` sigue siendo quien crea `BleManager`/
+ * `FirebaseRepository`/`BackendEventRepository` y dispara el
+ * `LaunchedEffect` del evento BLE (sin cambios ahí), y los pasa acá ya
+ * listos.
  */
 @Composable
 fun UsuarioInicioScreen(
@@ -69,20 +78,11 @@ fun UsuarioInicioScreen(
     bleManager: BleManager,
     firebaseRepository: FirebaseRepository,
     backendEventRepository: BackendEventRepository,
-    usuarioId: String
+    usuarioId: String,
+    onVerHistorial: () -> Unit,
+    onAbrirConexion: () -> Unit,
+    onOpenAjustes: () -> Unit
 ) {
-    var permissionsGranted by remember {
-        mutableStateOf(BlePermissions.hasRequiredPermissions(context))
-    }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        permissionsGranted = results.values.all { it }
-    }
-    val enableBluetoothLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { bleManager.refreshBluetoothState() }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -90,24 +90,25 @@ fun UsuarioInicioScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "GuardianApp", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-
-            text = "Modo Usuario",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        GuardianTopBar(
+            title = "GuardianApp",
+            subtitle = "Modo Usuario",
+            leading = { GuardianLogoBadge() },
+            trailing = {
+                GuardianIconButton(icon = Icons.Default.Person, contentDescription = "Perfil", onClick = onOpenAjustes)
+            }
         )
+        Spacer(modifier = Modifier.height(20.dp))
+
+        CodigoUsuarioCard(usuarioId = usuarioId)
         Spacer(modifier = Modifier.height(24.dp))
 
-        // FASE 6: código de vinculación, siempre visible (no depende de BLE).
-        CodigoUsuarioCard(usuarioId = usuarioId)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // FASE 7: simula desde Android los eventos que más adelante enviará
-        // el ESP32 por BLE (todavía no hay hardware). Siempre visible, no
-        // depende del estado de BLE — reutiliza el mismo
-        // BackendEventRepository/notifyState que ya usa el flujo real.
+        GuardianSectionTitle(
+            title = "Accesos rápidos",
+            trailingText = "Ver todos",
+            onTrailingClick = onVerHistorial
+        )
+        Spacer(modifier = Modifier.height(12.dp))
         AlertaSection(
             notifyState = backendEventRepository.notifyState,
             onEventoClick = { evento ->
@@ -121,263 +122,131 @@ fun UsuarioInicioScreen(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Conexión con el ESP32",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                when {
-                    !BlePermissions.isBluetoothSupported(context) -> {
-                        Text(
-                            text = "Este dispositivo no tiene Bluetooth Low Energy.",
-                            textAlign = TextAlign.Center
-                        )
-                    }
-
-                    !permissionsGranted -> {
-                        Text(
-                            text = "GuardianApp necesita permiso de Bluetooth para buscar el ESP32.",
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { permissionLauncher.launch(BlePermissions.requiredRuntimePermissions()) },
-                            shape = ButtonShape
-                        ) {
-                            Text("Conceder permisos")
-                        }
-                    }
-
-                    else -> {
-                        BluetoothStatusSection(
-                            enabled = bleManager.bluetoothEnabled,
-                            onActivar = { enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        bleManager.errorMessage?.let { message ->
-                            Text(
-                                text = message,
-                                color = MaterialTheme.colorScheme.error,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-
-                        when (bleManager.connectionState) {
-                            BleConnectionState.CONNECTED -> ConnectedSection(
-                                bleManager,
-                                firebaseRepository,
-                                backendEventRepository
-                            )
-                            BleConnectionState.CONNECTING -> Text("Conectando...")
-                            BleConnectionState.DISCONNECTED -> ScanSection(
-                                bleManager = bleManager,
-                                enabled = bleManager.bluetoothEnabled
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        ConexionEsp32ResumenCard(bleManager = bleManager, onClick = onAbrirConexion)
     }
 }
 
-/** FASE 6: tarjeta "hero" (siempre oscura, en ambos modos) con el código de 6 caracteres. */
+/**
+ * FASE 6 + rediseño: tarjeta "hero clara" (fondo azul muy claro) con el
+ * código de 6 caracteres y un botón para copiarlo al portapapeles. No afirma
+ * "conectado a tu apoderado": el Usuario no tiene forma de comprobar en
+ * tiempo real si ya lo vinculó un Apoderado (las reglas de Firestore de la
+ * Fase 6 bloquean esa lectura desde el cliente, ver `firebase/firestore.rules`
+ * y el comentario equivalente del lado Apoderado en `ApoderadoInicioScreen`)
+ * — mostrar eso sería inventar un dato, así que en su lugar se explica qué
+ * hacer con el código, que sí es información real.
+ */
 @Composable
 private fun CodigoUsuarioCard(usuarioId: String) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 360.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        shape = MaterialTheme.shapes.large,
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "TU CÓDIGO DE USUARIO",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
+    GuardianStatusCard(style = GuardianHeroStyle.SOFT) {
+        val textColor = GuardianHeroStyle.SOFT.contentColor()
+        Text(text = "Hola 👋", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = textColor)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Tu código de usuario",
+            style = MaterialTheme.typography.bodyMedium,
+            color = textColor.copy(alpha = 0.75f)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = usuarioId,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 4.sp,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = textColor
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(color = Color.White.copy(alpha = 0.6f), shape = CircleShape)
+                    .clickable {
+                        clipboardManager.setText(AnnotatedString(usuarioId))
+                        Toast.makeText(context, "Código copiado", Toast.LENGTH_SHORT).show()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = GuardianIcons.ContentCopy,
+                    contentDescription = "Copiar código",
+                    tint = textColor,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(8.dp).background(color = textColor.copy(alpha = 0.5f), shape = CircleShape))
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Compártelo con tu Apoderado para que se vincule desde su teléfono.",
+                text = "Comparte tu código con tu Apoderado para vincularlo.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
-@Composable
-private fun BluetoothStatusSection(enabled: Boolean, onActivar: () -> Unit) {
-    Text(text = "Estado Bluetooth:", style = MaterialTheme.typography.labelLarge)
-    Text(text = if (enabled) "Activado" else "Desactivado")
-    if (!enabled) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = onActivar, shape = ButtonShape) {
-            Text("Activar Bluetooth")
-        }
-    }
-}
-
-@Composable
-private fun ScanSection(bleManager: BleManager, enabled: Boolean) {
-    Text(text = "Dispositivos encontrados:", style = MaterialTheme.typography.labelLarge)
-    Spacer(modifier = Modifier.height(8.dp))
-
-    if (bleManager.foundDevices.isEmpty()) {
-        Text(
-            text = if (bleManager.isScanning) {
-                "Buscando dispositivos..."
-            } else {
-                "Ningún dispositivo encontrado todavía."
-            },
-            textAlign = TextAlign.Center
-        )
-    } else {
-        bleManager.foundDevices.forEach { discovered ->
-            DiscoveredDeviceRow(discovered = discovered, onConectar = { bleManager.connect(discovered.device) })
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-    Button(
-        onClick = { bleManager.startScan() },
-        enabled = enabled && !bleManager.isScanning,
-        shape = ButtonShape
-    ) {
-        Text(if (bleManager.isScanning) "Buscando..." else "Buscar dispositivos")
-    }
-}
-
-@Composable
-private fun DiscoveredDeviceRow(discovered: DiscoveredDevice, onConectar: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 320.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = discovered.name)
-        Button(onClick = onConectar, shape = ButtonShape) {
-            Text("Conectar")
-        }
-    }
-}
-
-@Composable
-private fun ConnectedSection(
-    bleManager: BleManager,
-    firebaseRepository: FirebaseRepository,
-    backendEventRepository: BackendEventRepository
-) {
-    Text(
-        text = bleManager.connectedDeviceName ?: "ESP32 Guardian",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold
-    )
-    Spacer(modifier = Modifier.height(8.dp))
-    Text(text = "Estado:")
-    Text(text = "Conectado", style = MaterialTheme.typography.bodyLarge, color = successColor())
-
-    Spacer(modifier = Modifier.height(24.dp))
-    val event = bleManager.lastEvent
-    if (event != null) {
-        Text(text = "Evento recibido:")
-        Text(text = event.message, style = MaterialTheme.typography.headlineSmall)
-        Text(text = event.receivedAt, style = MaterialTheme.typography.bodySmall)
-        Spacer(modifier = Modifier.height(16.dp))
-        FirebaseStatusSection(uploadState = firebaseRepository.uploadState)
-        Spacer(modifier = Modifier.height(16.dp))
-        BackendStatusSection(notifyState = backendEventRepository.notifyState)
-    } else {
-        Text(text = "Esperando evento del ESP32...", textAlign = TextAlign.Center)
-    }
-
-    Spacer(modifier = Modifier.height(24.dp))
-    Button(onClick = { bleManager.disconnect() }, shape = ButtonShape) {
-        Text("Desconectar")
-    }
-}
-
-/** FASE 4: muestra el resultado del envío del último evento a Firestore. */
-@Composable
-private fun FirebaseStatusSection(uploadState: EventUploadState) {
-    Text(text = "Firebase:", style = MaterialTheme.typography.labelLarge)
-    AnimatedStatus(targetState = uploadState) { state ->
-        when (state) {
-            is EventUploadState.Idle -> Text(text = "En espera.")
-            is EventUploadState.Sending -> Text(text = "Enviando...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            is EventUploadState.Success -> Text(text = "✓ Evento enviado correctamente", color = successColor())
-            is EventUploadState.Error -> Text(
-                text = "✗ ${state.message}",
-                color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
-/** FASE 5: muestra el resultado del aviso HTTP al backend (el que dispara FCM al Apoderado). */
-@Composable
-private fun BackendStatusSection(notifyState: BackendNotifyState) {
-    Text(text = "Notificación al Apoderado:", style = MaterialTheme.typography.labelLarge)
-    AnimatedStatus(targetState = notifyState) { state ->
-        when (state) {
-            is BackendNotifyState.Idle -> Text(text = "En espera.")
-            is BackendNotifyState.Sending -> Text(text = "Enviando...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            is BackendNotifyState.Success -> Text(text = "✓ Backend notificado correctamente", color = successColor())
-            is BackendNotifyState.Error -> Text(
-                text = "✗ ${state.message}",
-                color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center
+                color = textColor.copy(alpha = 0.8f)
             )
         }
     }
 }
 
 /**
- * FASE 7: botones para simular, sin ESP32, los eventos que el Usuario
- * podría generar. Cada tarjeta dispara el mismo camino que en el futuro
- * disparará BLE: [BackendEventRepository.notifyEvent]. Se deshabilitan
- * mientras hay un envío en curso para evitar toques duplicados accidentales.
- * Grilla 2x2: los eventos no críticos son [AlertaTile] —tarjetas de
- * información neutras con una insignia circular de color por categoría
- * (misma paleta que `ui/components/EventCategory.kt` usa en el Historial)—;
- * Emergencia ([SimulatedEvent.isCritical]) ocupa su misma celda pero como
- * [EmergencyTile]: rellena con un degradado rojo y la sirena en blanco,
- * para que destaque sin salirse de la matriz.
+ * FASE 3 + rediseño: resumen compacto y tocable (abre [UsuarioConectarScreen])
+ * del estado real de la conexión BLE — no simula ningún dato, solo lee
+ * [BleManager].
+ */
+@Composable
+private fun ConexionEsp32ResumenCard(bleManager: BleManager, onClick: () -> Unit) {
+    val conectado = bleManager.connectionState == BleConnectionState.CONNECTED
+    val interactionSource = remember { MutableInteractionSource() }
+    GuardianCard(modifier = Modifier.pressScale(interactionSource).clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(imageVector = GuardianIcons.Bluetooth, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "Conexión con el ESP32", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "GuardianApp se conecta por Bluetooth para buscar el ESP32.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = if (conectado) successColor() else MaterialTheme.colorScheme.onSurfaceVariant,
+                                shape = CircleShape
+                            )
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (conectado) "Conectado" else "Desconectado",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (conectado) successColor() else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * FASE 7 + rediseño: 4 tarjetas de "Accesos rápidos" en una grilla 2x2, con
+ * [GuardianActionCard] (Emergencia incluida — ya no tiene un componente
+ * aparte, solo un tinte más fuerte, ver esa función). Cada una dispara el
+ * mismo camino que en el futuro disparará BLE:
+ * [BackendEventRepository.notifyEvent]. Se deshabilitan mientras hay un
+ * envío en curso para evitar toques duplicados accidentales.
  */
 @Composable
 private fun AlertaSection(
@@ -386,86 +255,29 @@ private fun AlertaSection(
 ) {
     val enviando = notifyState is BackendNotifyState.Sending
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(text = "Accesos rápidos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(16.dp))
-            SimulatedEvent.entries.chunked(2).forEach { fila ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 320.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    fila.forEach { evento ->
-                        if (evento.isCritical) {
-                            EmergencyTile(
-                                evento = evento,
-                                enabled = !enviando,
-                                onClick = { onEventoClick(evento) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        } else {
-                            AlertaTile(
-                                evento = evento,
-                                enabled = !enviando,
-                                onClick = { onEventoClick(evento) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-            AnimatedStatus(targetState = notifyState) { state -> AlertaStatusText(state) }
-        }
-    }
-}
-
-/** Una tarjeta de "Accesos rápidos": insignia circular de color + título + subtítulo de acción. */
-@Composable
-private fun AlertaTile(
-    evento: SimulatedEvent,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val category = categoryFor(evento.type)
-
-    Card(
-        onClick = onClick,
-        enabled = enabled,
-        interactionSource = interactionSource,
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        modifier = modifier.pressScale(interactionSource)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(color = category.color.copy(alpha = 0.16f), shape = CircleShape),
-                contentAlignment = Alignment.Center
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        SimulatedEvent.entries.chunked(2).forEach { fila ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(text = evento.emoji, fontSize = 18.sp)
+                fila.forEach { evento ->
+                    val category = categoryFor(evento.type)
+                    GuardianActionCard(
+                        title = evento.label,
+                        subtitle = evento.actionLabel,
+                        color = category.color,
+                        enabled = !enviando,
+                        emphasized = evento.isCritical,
+                        onClick = { onEventoClick(evento) },
+                        modifier = Modifier.weight(1f),
+                        icon = { tint -> CategoryIcon(kind = category.kind, tint = tint, modifier = Modifier.size(22.dp)) }
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(12.dp))
-            Text(text = evento.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                text = evento.actionLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
+        AnimatedStatus(targetState = notifyState) { state -> AlertaStatusText(state) }
     }
 }
 

@@ -7,23 +7,24 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.guardianapp.ui.icons.GuardianIcons
 
 /**
- * FASE 9: las 3 secciones del menú inferior, compartidas por ambos roles
- * (cada rol les da contenido propio — ver `screens/usuario/` y
- * `screens/apoderado/`). Un enum + `when` alcanza: es un intercambio entre
- * 3 hermanos sin pila de navegación, argumentos ni deep links, mismo
- * criterio que ya usó la Fase 2 para no agregar una librería de navegación
- * para elegir el rol (ver `MainActivity.GuardianAppRoot`).
+ * FASE 9 + rediseño sobre `design/guardianapp-ui-reference.png`: las 3
+ * secciones de la barra inferior flotante, compartidas por ambos roles (cada
+ * uno les da contenido propio — ver `screens/usuario/` y
+ * `screens/apoderado/`). El orden importa: [GuardianBottomBar] los dibuja en
+ * este orden (izquierda→derecha), con INICIO como el botón circular elevado
+ * del centro.
  *
- * El [icon] usa Material Icons en vez de un emoji, para un aspecto
- * consistente con Material 3: `Home` y `Settings` salen de
- * `material-icons-core` (el set curado, liviano); `History` no está en ese
- * set, así que se define como [ImageVector] local en
- * `ui/icons/GuardianIcons.kt` para no arrastrar `material-icons-extended`
- * (~+8 MB de APK debug). El [label] se muestra bajo el ícono y también se
- * reutiliza como `contentDescription` (ver [BottomNavBar]).
+ * Historial ya no es una pestaña de esta barra (la referencia solo pide
+ * Conectar/Inicio/Ajustes) — sigue existiendo como pantalla, alcanzable
+ * desde un enlace "Ver historial" en Inicio (ver `UsuarioBleScreen`/
+ * `ApoderadoScreen`). CONECTAR reemplaza ese hueco: para el Usuario abre la
+ * pantalla de conexión BLE/ESP32 que ya existía dentro de Inicio; para el
+ * Apoderado, el estado real de su registro de notificaciones (no hay BLE de
+ * ese lado) — ver `screens/usuario/UsuarioConectarScreen.kt` y
+ * `screens/apoderado/ApoderadoConectarScreen.kt`.
  */
 enum class AppTab(val icon: ImageVector, val label: String) {
+    CONECTAR(GuardianIcons.Bluetooth, "Conectar"),
     INICIO(Icons.Default.Home, "Inicio"),
-    HISTORIAL(GuardianIcons.History, "Historial"),
     AJUSTES(Icons.Default.Settings, "Ajustes")
 }

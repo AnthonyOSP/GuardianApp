@@ -1,34 +1,56 @@
 package com.example.guardianapp.ui.components
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.guardianapp.SimulatedEvent
+import com.example.guardianapp.ui.icons.BathroomGlyph
+import com.example.guardianapp.ui.icons.HelpGlyph
+import com.example.guardianapp.ui.icons.RestaurantGlyph
 import com.example.guardianapp.ui.theme.CategoryBlue
 import com.example.guardianapp.ui.theme.CategoryGreen
 import com.example.guardianapp.ui.theme.CategoryOrange
 
 /**
- * FASE 9: emoji + color por tipo de evento, para las pantallas de
- * Historial. Es la única parte de la app con más de un color de acento —
- * a propósito, como etiquetas de categoría sobre un fondo que sigue siendo
- * monocromo (mismo criterio que usan apps de finanzas con categorías de
- * gasto de colores sobre una interfaz mayormente blanco/negro).
+ * Ícono vectorial + color por tipo de evento, para las insignias circulares
+ * de "Accesos rápidos" y del Historial. Reemplaza el emoji que usaba esta
+ * clase antes del rediseño (`design/guardianapp-ui-reference.png` pide
+ * íconos vectoriales reales, no emoji, como ícono principal) — ver
+ * [CategoryIcon].
  *
- * Reutiliza [SimulatedEvent] para type/emoji/label — no duplica esos datos.
+ * Reutiliza [SimulatedEvent] para type/label — no duplica esos datos.
  * Cualquier `type` que no sea uno de los 4 conocidos (por ahora, el
- * `ESP32_EVENT` real de las Fases 4-6) cae en el genérico 🔔/"Evento".
+ * `ESP32_EVENT` real de las Fases 4-6) cae en el genérico [CategoryKind.GENERIC].
  */
-data class EventCategory(val emoji: String, val label: String, val color: Color)
+enum class CategoryKind { EMERGENCY, FOOD, BATHROOM, HELP, GENERIC }
+
+data class EventCategory(val kind: CategoryKind, val label: String, val color: Color)
 
 @Composable
 fun categoryFor(type: String?): EventCategory {
     val simulated = SimulatedEvent.fromType(type)
     return when (simulated) {
-        SimulatedEvent.EMERGENCY -> EventCategory(simulated.emoji, simulated.label, MaterialTheme.colorScheme.error)
-        SimulatedEvent.FOOD -> EventCategory(simulated.emoji, simulated.label, CategoryOrange)
-        SimulatedEvent.BATHROOM -> EventCategory(simulated.emoji, simulated.label, CategoryBlue)
-        SimulatedEvent.HELP -> EventCategory(simulated.emoji, simulated.label, CategoryGreen)
-        null -> EventCategory("🔔", "Evento", MaterialTheme.colorScheme.onSurfaceVariant)
+        SimulatedEvent.EMERGENCY -> EventCategory(CategoryKind.EMERGENCY, simulated.label, MaterialTheme.colorScheme.error)
+        SimulatedEvent.FOOD -> EventCategory(CategoryKind.FOOD, simulated.label, CategoryOrange)
+        SimulatedEvent.BATHROOM -> EventCategory(CategoryKind.BATHROOM, simulated.label, CategoryBlue)
+        SimulatedEvent.HELP -> EventCategory(CategoryKind.HELP, simulated.label, CategoryGreen)
+        null -> EventCategory(CategoryKind.GENERIC, "Evento", MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Dibuja el ícono correspondiente a [kind], tintado con [tint]. */
+@Composable
+fun CategoryIcon(kind: CategoryKind, tint: Color, modifier: Modifier = Modifier) {
+    when (kind) {
+        CategoryKind.EMERGENCY -> Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = tint, modifier = modifier)
+        CategoryKind.FOOD -> RestaurantGlyph(tint = tint, modifier = modifier)
+        CategoryKind.BATHROOM -> BathroomGlyph(tint = tint, modifier = modifier)
+        CategoryKind.HELP -> HelpGlyph(tint = tint, modifier = modifier)
+        CategoryKind.GENERIC -> Icon(imageVector = Icons.Default.Notifications, contentDescription = null, tint = tint, modifier = modifier)
     }
 }
