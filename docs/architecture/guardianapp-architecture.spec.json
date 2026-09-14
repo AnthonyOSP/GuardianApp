@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "GuardianApp Runtime Architecture",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/AnthonyOSP/GuardianApp.git",
+      "revision": "54fc2857da0c82c73c20991048634e14dcc8e624"
+    },
+    "views": [
+      {
+        "id": "alert-path",
+        "label": "Alert delivery path",
+        "focus": ["esp32", "ble-manager", "usuario-ui", "event-repos", "backend", "fcm", "push-inbox", "apoderado-ui"],
+        "note": "One alert from the BLE event (or a manual button) to the guardian's notification."
+      },
+      {
+        "id": "routing",
+        "label": "Who gets notified",
+        "focus": ["apoderado-ui", "pairing-repos", "firestore", "backend"],
+        "note": "Pairing data in Firestore lets the backend target the linked guardian instead of broadcasting."
+      },
+      {
+        "id": "trust",
+        "label": "Trust boundaries",
+        "focus": ["event-repos", "backend", "firestore", "fcm"],
+        "note": "The APK holds only a shared secret; the backend holds the Firebase Admin SDK key."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "esp32",
+      "type": "external",
+      "label": "ESP32 peripheral",
+      "sublabel": "BLE GATT device",
+      "tag": "hardware",
+      "pos": [24, 300],
+      "size": [150, 56]
+    },
+    {
+      "id": "ble-manager",
+      "type": "backend",
+      "label": "BleManager",
+      "sublabel": "BLE scan + GATT",
+      "sources": [{ "path": "app/src/main/java/com/example/guardianapp/ble/BleManager.kt" }],
+      "pos": [210, 298],
+      "size": [172, 60]
+    },
+    {
+      "id": "usuario-ui",
+      "type": "frontend",
+      "label": "Usuario screens",
+      "sublabel": "tabs + alert buttons",
+      "sources": [
+        { "path": "app/src/main/java/com/example/guardianapp/UsuarioBleScreen.kt" },
+        { "path": "app/src/main/java/com/example/guardianapp/screens/usuario/UsuarioInicioScreen.kt" }
+      ],
+      "pos": [210, 104],
+      "size": [172, 60]
+    },
+    {
+      "id": "app-shell",
+      "type": "frontend",
+      "label": "App shell",
+      "sublabel": "MainActivity",
+      "sources": [{ "path": "app/src/main/java/com/example/guardianapp/MainActivity.kt" }],
+      "pos": [210, 492],
+      "size": [172, 60]
+    },
+    {
+      "id": "event-repos",
+      "type": "backend",
+      "label": "Event repositories",
+      "sublabel": "Firestore + backend",
+      "sources": [
+        { "path": "app/src/main/java/com/example/guardianapp/backend/BackendEventRepository.kt" },
+        { "path": "app/src/main/java/com/example/guardianapp/firebase/FirebaseRepository.kt" }
+      ],
+      "pos": [452, 104],
+      "size": [196, 60]
+    },
+    {
+      "id": "pairing-repos",
+      "type": "backend",
+      "label": "Pairing + token repos",
+      "sublabel": "token + vinculacion",
+      "sources": [
+        { "path": "app/src/main/java/com/example/guardianapp/fcm/FcmTokenRepository.kt" },
+        { "path": "app/src/main/java/com/example/guardianapp/firebase/VinculacionRepository.kt" }
+      ],
+      "pos": [452, 492],
+      "size": [196, 60]
+    },
+    {
+      "id": "push-inbox",
+      "type": "messagebus",
+      "label": "Push receiver + hub",
+      "sublabel": "FCM svc + notif hub",
+      "sources": [
+        { "path": "app/src/main/java/com/example/guardianapp/fcm/GuardianFirebaseMessagingService.kt" },
+        { "path": "app/src/main/java/com/example/guardianapp/fcm/GuardianNotificationCenter.kt" }
+      ],
+      "pos": [718, 298],
+      "size": [182, 60]
+    },
+    {
+      "id": "apoderado-ui",
+      "type": "frontend",
+      "label": "Apoderado screens",
+      "sublabel": "pairing + last event",
+      "sources": [
+        { "path": "app/src/main/java/com/example/guardianapp/ApoderadoScreen.kt" },
+        { "path": "app/src/main/java/com/example/guardianapp/screens/apoderado/ApoderadoInicioScreen.kt" }
+      ],
+      "pos": [718, 492],
+      "size": [182, 60]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "Alert backend",
+      "sublabel": "Express + Admin SDK",
+      "brand": "render",
+      "tag": "holds Admin SDK key",
+      "sources": [{ "path": "backend/src/routes/events.js" }],
+      "pos": [980, 298],
+      "size": [200, 60]
+    },
+    {
+      "id": "firestore",
+      "type": "database",
+      "label": "Cloud Firestore",
+      "sublabel": "3 collections",
+      "brand": "firebase",
+      "pos": [980, 104],
+      "size": [200, 60]
+    },
+    {
+      "id": "fcm",
+      "type": "messagebus",
+      "label": "Firebase Cloud Messaging",
+      "sublabel": "push delivery",
+      "brand": "firebase",
+      "pos": [980, 492],
+      "size": [200, 60]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "GuardianApp APK  -  Android client",
+      "wraps": ["usuario-ui", "app-shell", "ble-manager", "event-repos", "pairing-repos", "push-inbox", "apoderado-ui"],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Server side (Render + Firebase)",
+      "wraps": ["firestore", "backend", "fcm"],
+      "pad": 22
+    }
+  ],
+  "connections": [
+    { "id": "c1", "from": "esp32", "to": "ble-manager", "label": "GATT notify", "variant": "emphasis", "labelDy": 52 },
+    { "id": "c2", "from": "ble-manager", "to": "usuario-ui", "label": "lastEvent", "variant": "emphasis" },
+    { "id": "c3", "from": "usuario-ui", "to": "event-repos", "label": "on event", "variant": "emphasis" },
+    { "id": "c4", "from": "event-repos", "to": "backend", "label": "POST /api/events", "variant": "emphasis" },
+    { "id": "c5", "from": "backend", "to": "fcm", "label": "Admin SDK send", "variant": "emphasis", "labelDy": 38 },
+    { "id": "c6", "from": "fcm", "to": "push-inbox", "label": "push: notif + data", "variant": "emphasis" },
+    { "id": "c7", "from": "push-inbox", "to": "apoderado-ui", "label": "NotifiedEvent", "variant": "emphasis", "labelDy": 38 },
+    { "id": "c8", "from": "event-repos", "to": "firestore", "label": "write events" },
+    { "id": "c9", "from": "backend", "to": "firestore", "label": "read vinculaciones + tokens", "labelDy": -28 },
+    { "id": "c10", "from": "apoderado-ui", "to": "pairing-repos", "label": "register token / pair code", "labelDy": -66 },
+    { "id": "c11", "from": "app-shell", "to": "push-inbox", "label": "notif tap -> extras", "variant": "dashed", "labelDy": -30 }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Alert delivery path",
+      "items": [
+        "Trigger: a real ESP32 GATT event, or a manual EMERGENCY / FOOD / BATHROOM / HELP button - same path either way.",
+        "Each event fans out independently: a direct Firestore write plus the HTTPS POST to the backend; one can fail without the other."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Pairing + identity (no Firebase Auth yet)",
+      "items": [
+        "LocalIdentity keeps anonymous SharedPreferences IDs: usuarioId (6-char code) and apoderadoId (UUID); the POST body carries usuarioId.",
+        "Backend reads vinculaciones + apoderadoTokens, resolves usuarioId to the linked guardian, and multicasts - never a broadcast."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust boundaries",
+      "items": [
+        "The APK ships only X-API-Key, a shared secret (extractable, R8 disabled) - not authentication; slated for Firebase Auth.",
+        "The backend alone holds the Firebase Admin SDK key and bypasses Firestore rules. Foreground vs background only changes who renders the notification."
+      ]
+    }
+  ]
+}
