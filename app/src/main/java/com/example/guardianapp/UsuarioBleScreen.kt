@@ -19,22 +19,29 @@ import com.example.guardianapp.ble.BleManager
 import com.example.guardianapp.firebase.FirebaseRepository
 import com.example.guardianapp.identity.LocalIdentity
 import com.example.guardianapp.navigation.AppTab
-import com.example.guardianapp.navigation.BottomNavBar
+import com.example.guardianapp.navigation.GuardianBottomBar
 import com.example.guardianapp.screens.usuario.UsuarioAjustesScreen
+import com.example.guardianapp.screens.usuario.UsuarioConectarScreen
 import com.example.guardianapp.screens.usuario.UsuarioHistorialScreen
 import com.example.guardianapp.screens.usuario.UsuarioInicioScreen
+import com.example.guardianapp.ui.components.AnimatedStatus
 import com.example.guardianapp.ui.theme.GuardianAppTheme
 
 /**
  * FASE 3, pantalla del rol Usuario. Desde la Fase 9 es solo el "host" de la
- * navegación inferior (Inicio/Historial/Ajustes, ver `navigation/AppTab.kt`)
- * — el contenido de cada pestaña vive en `screens/usuario/`. Este archivo
- * sigue siendo dueño de todo lo que **no** debe reiniciarse al cambiar de
- * pestaña: [BleManager], [FirebaseRepository], [BackendEventRepository] y
- * el `LaunchedEffect` que reacciona a un evento BLE nuevo — exactamente
- * igual que antes de esta fase, sin cambios de lógica. Como viven arriba
- * del `when(selectedTab)`, cambiar de pestaña nunca los recrea ni pierde su
- * estado (conexión BLE, resultado del último envío, etc.).
+ * navegación inferior (rediseño sobre `design/guardianapp-ui-reference.png`:
+ * Conectar/Inicio/Ajustes, ver `navigation/AppTab.kt`) — el contenido de
+ * cada pestaña vive en `screens/usuario/`. Este archivo sigue siendo dueño
+ * de todo lo que **no** debe reiniciarse al cambiar de pestaña: [BleManager],
+ * [FirebaseRepository], [BackendEventRepository] y el `LaunchedEffect` que
+ * reacciona a un evento BLE nuevo — exactamente igual que antes de este
+ * rediseño, sin cambios de lógica. Como viven arriba del `when(selectedTab)`,
+ * cambiar de pestaña nunca los recrea ni pierde su estado (conexión BLE,
+ * resultado del último envío, etc.).
+ *
+ * Historial ya no es una pestaña de la barra inferior (la referencia visual
+ * solo pide 3 botones) — [historialVisible] la muestra por encima, como una
+ * pantalla "apilada" sobre Inicio, alcanzable desde su enlace "Ver todos".
  */
 @Composable
 fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
@@ -73,21 +80,47 @@ fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
     }
 
     var selectedTab by remember { mutableStateOf(AppTab.INICIO) }
+    var historialVisible by remember { mutableStateOf(false) }
 
     Scaffold(
-        bottomBar = { BottomNavBar(selectedTab = selectedTab, onTabSelected = { selectedTab = it }) }
+        bottomBar = {
+            GuardianBottomBar(
+                selectedTab = selectedTab,
+                onTabSelected = { tab ->
+                    historialVisible = false
+                    selectedTab = tab
+                }
+            )
+        }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
-            when (selectedTab) {
-                AppTab.INICIO -> UsuarioInicioScreen(
-                    context = context,
-                    bleManager = bleManager,
-                    firebaseRepository = firebaseRepository,
+            if (historialVisible) {
+                UsuarioHistorialScreen(
                     backendEventRepository = backendEventRepository,
-                    usuarioId = usuarioId
+                    onBack = { historialVisible = false }
                 )
-                AppTab.HISTORIAL -> UsuarioHistorialScreen(backendEventRepository = backendEventRepository)
-                AppTab.AJUSTES -> UsuarioAjustesScreen(usuarioId = usuarioId, onCerrarSesion = onCerrarSesion)
+            } else {
+                AnimatedStatus(targetState = selectedTab) { tab ->
+                    when (tab) {
+                        AppTab.CONECTAR -> UsuarioConectarScreen(
+                            context = context,
+                            bleManager = bleManager,
+                            firebaseRepository = firebaseRepository,
+                            backendEventRepository = backendEventRepository
+                        )
+                        AppTab.INICIO -> UsuarioInicioScreen(
+                            context = context,
+                            bleManager = bleManager,
+                            firebaseRepository = firebaseRepository,
+                            backendEventRepository = backendEventRepository,
+                            usuarioId = usuarioId,
+                            onVerHistorial = { historialVisible = true },
+                            onAbrirConexion = { selectedTab = AppTab.CONECTAR },
+                            onOpenAjustes = { selectedTab = AppTab.AJUSTES }
+                        )
+                        AppTab.AJUSTES -> UsuarioAjustesScreen(usuarioId = usuarioId, onCerrarSesion = onCerrarSesion)
+                    }
+                }
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.example.guardianapp.screens.apoderado
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,10 +9,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -21,17 +30,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.guardianapp.BuildConfig
 import com.example.guardianapp.fcm.DeviceRegistrationState
-import com.example.guardianapp.ui.components.SectionCard
+import com.example.guardianapp.ui.components.GuardianIconBadge
+import com.example.guardianapp.ui.components.GuardianTopBar
 import com.example.guardianapp.ui.components.SettingsRow
+import com.example.guardianapp.ui.icons.GuardianIcons
 import com.example.guardianapp.ui.theme.ButtonShape
 
 /**
- * FASE 9, pestaña "Ajustes" del Apoderado. Mismo criterio que
- * `UsuarioAjustesScreen`: solo las filas con datos reales muestran algo
- * específico (Notificaciones = estado real de registro FCM; Dispositivos
- * vinculados = el ID propio de este Apoderado; Acerca de = versión real vía
- * `BuildConfig`); el resto se marca "Próximamente" en vez de simular una
- * función que no existe.
+ * Pestaña "Ajustes" del Apoderado, rediseñada sobre
+ * `design/guardianapp-ui-reference.png`: mismo criterio que
+ * `UsuarioAjustesScreen` — cada opción es su propia tarjeta blanca
+ * redondeada (ver [SettingsRow]). Solo las filas con datos reales muestran
+ * algo específico (Notificaciones = estado real de registro FCM;
+ * Dispositivos vinculados = el ID propio de este Apoderado; Acerca de =
+ * versión real vía `BuildConfig`); el resto se marca "Próximamente" en vez
+ * de simular una función que no existe.
  */
 @Composable
 fun ApoderadoAjustesScreen(
@@ -46,19 +59,17 @@ fun ApoderadoAjustesScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "Ajustes",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.fillMaxWidth()
+        GuardianTopBar(
+            title = "Ajustes",
+            subtitle = "Configura tu cuenta y preferencias",
+            leading = { GuardianIconBadge(icon = Icons.Default.Settings) }
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-        SectionCard {
-            SettingsRow(emoji = "👤", title = "Perfil", subtitle = "Próximamente")
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SettingsRow(icon = Icons.Default.Person, title = "Perfil", subtitle = "Próximamente")
             SettingsRow(
-                emoji = "🔔",
+                icon = Icons.Default.Notifications,
                 title = "Notificaciones",
                 subtitle = when (registrationState) {
                     is DeviceRegistrationState.Registered -> "Activas — dispositivo registrado"
@@ -66,30 +77,31 @@ fun ApoderadoAjustesScreen(
                     else -> "Registrando..."
                 }
             )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             SettingsRow(
-                emoji = "🔗",
+                icon = GuardianIcons.Link,
                 title = "Dispositivos vinculados",
                 subtitle = "ID de este dispositivo: $apoderadoId"
             )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             SettingsRow(
-                emoji = "ℹ️",
+                icon = Icons.Default.Info,
                 title = "Acerca de",
                 subtitle = "GuardianApp ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})"
             )
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         OutlinedButton(
             onClick = onCerrarSesion,
             shape = ButtonShape,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.error),
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 320.dp)
         ) {
-            Text("Cerrar sesión")
+            Icon(imageVector = Icons.Default.ExitToApp, contentDescription = null, modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Cerrar sesión", fontWeight = FontWeight.Medium)
         }
     }
 }

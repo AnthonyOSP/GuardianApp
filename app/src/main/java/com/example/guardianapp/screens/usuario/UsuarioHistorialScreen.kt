@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,13 +19,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.guardianapp.SimulatedEvent
 import com.example.guardianapp.backend.BackendEventRepository
 import com.example.guardianapp.backend.SentEvent
 import com.example.guardianapp.ui.components.FilterChipsRow
+import com.example.guardianapp.ui.components.GuardianIconButton
+import com.example.guardianapp.ui.components.GuardianTopBar
 import com.example.guardianapp.ui.components.HistorialEntryCard
 import com.example.guardianapp.ui.components.categoryFor
 import com.example.guardianapp.ui.components.formatTime
@@ -31,24 +34,27 @@ import com.example.guardianapp.ui.components.groupByDayLabel
 import com.example.guardianapp.ui.theme.successColor
 
 /**
- * FASE 9: historial de alertas que **este Usuario envió**
+ * Historial de alertas que **este Usuario envió**
  * ([BackendEventRepository.sentHistory] — ver el comentario ahí sobre por
  * qué es la fuente mínima correcta, sin Firestore/backend nuevos). Mismo
  * componente de fila y misma agrupación por fecha que
- * `ApoderadoHistorialScreen`, aplicados sobre datos distintos.
+ * `ApoderadoHistorialScreen`, aplicados sobre datos distintos. Ya no es una
+ * pestaña de la barra inferior (rediseño sobre
+ * `design/guardianapp-ui-reference.png`): se abre desde "Ver todos" en
+ * Inicio y [onBack] vuelve ahí.
  */
 @Composable
-fun UsuarioHistorialScreen(backendEventRepository: BackendEventRepository) {
+fun UsuarioHistorialScreen(backendEventRepository: BackendEventRepository, onBack: () -> Unit) {
     var filtro by remember { mutableStateOf<SimulatedEvent?>(null) }
 
     val entradas = backendEventRepository.sentHistory
         .filter { filtro == null || it.type == filtro?.type }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Historial",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
+        GuardianTopBar(
+            title = "Historial",
+            subtitle = "Tus alertas y eventos",
+            leading = { GuardianIconButton(icon = Icons.Default.ArrowBack, contentDescription = "Volver", onClick = onBack) },
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
         )
 
@@ -90,13 +96,8 @@ fun UsuarioHistorialScreen(backendEventRepository: BackendEventRepository) {
                         category = categoryFor(entrada.type),
                         message = entrada.message,
                         timeLabel = formatTime(entrada.sentAtMillis),
-                        trailing = {
-                            Text(
-                                text = if (entrada.success) "✓" else "✕",
-                                color = if (entrada.success) successColor() else MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        statusLabel = if (entrada.success) "Enviado" else "Error",
+                        statusColor = if (entrada.success) successColor() else MaterialTheme.colorScheme.error
                     )
                 }
             }

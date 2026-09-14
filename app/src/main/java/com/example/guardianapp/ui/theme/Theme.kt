@@ -7,18 +7,19 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 private val LightColors = lightColorScheme(
-    primary = VioletPrimaryLight,
-    onPrimary = VioletOnPrimaryLight,
-    primaryContainer = VioletPrimaryContainerLight,
-    onPrimaryContainer = VioletOnPrimaryContainerLight,
-    secondary = NeutralSecondaryLight,
-    onSecondary = NeutralOnSecondaryLight,
-    secondaryContainer = NeutralSecondaryContainerLight,
-    onSecondaryContainer = NeutralOnSecondaryContainerLight,
+    primary = BluePrimaryLight,
+    onPrimary = BlueOnPrimaryLight,
+    primaryContainer = BluePrimaryContainerLight,
+    onPrimaryContainer = BlueOnPrimaryContainerLight,
+    secondary = BlueSecondaryLight,
+    onSecondary = BlueOnSecondaryLight,
+    secondaryContainer = BlueSecondaryContainerLight,
+    onSecondaryContainer = BlueOnSecondaryContainerLight,
     background = BackgroundLight,
     onBackground = OnBackgroundLight,
     surface = SurfaceLight,
@@ -33,14 +34,14 @@ private val LightColors = lightColorScheme(
 )
 
 private val DarkColors = darkColorScheme(
-    primary = VioletPrimaryDark,
-    onPrimary = VioletOnPrimaryDark,
-    primaryContainer = VioletPrimaryContainerDark,
-    onPrimaryContainer = VioletOnPrimaryContainerDark,
-    secondary = NeutralSecondaryDark,
-    onSecondary = NeutralOnSecondaryDark,
-    secondaryContainer = NeutralSecondaryContainerDark,
-    onSecondaryContainer = NeutralOnSecondaryContainerDark,
+    primary = BluePrimaryDark,
+    onPrimary = BlueOnPrimaryDark,
+    primaryContainer = BluePrimaryContainerDark,
+    onPrimaryContainer = BlueOnPrimaryContainerDark,
+    secondary = BlueSecondaryDark,
+    onSecondary = BlueOnSecondaryDark,
+    secondaryContainer = BlueSecondaryContainerDark,
+    onSecondaryContainer = BlueOnSecondaryContainerDark,
     background = BackgroundDark,
     onBackground = OnBackgroundDark,
     surface = SurfaceDark,
@@ -54,19 +55,27 @@ private val DarkColors = darkColorScheme(
     onErrorContainer = OnErrorContainerDark
 )
 
-// Esquinas redondeadas, más suaves que el default de Material3 — look
-// "tarjeta" de `design/guardian-navigation.png` (no píldora: esa era la
-// referencia visual anterior, de un shot distinto de Dribbble).
+// Esquinas redondeadas, look "tarjeta premium" de
+// `design/guardianapp-ui-reference.png` — un poco más suaves que la v3.
 private val GuardianShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(32.dp)
 )
 
-/** Forma de botón: rectángulo bien redondeado (16dp), no píldora — coincide con el resto de las tarjetas. */
-val ButtonShape = RoundedCornerShape(16.dp)
+/**
+ * Forma de botón: píldora completa (bordes 100% redondeados) — coincide con
+ * "Comenzar"/"Vincular"/"Buscar dispositivo" en la imagen de referencia.
+ * (La v3 anterior usaba un rectángulo de 16dp; la referencia actual tiene
+ * prioridad sobre ese diseño para los aspectos visuales.)
+ */
+val ButtonShape = RoundedCornerShape(percent = 50)
+
+/** Degradado azul de marca (botón Home central, tarjetas "hero", logo). */
+val GuardianBlueGradient: Brush
+    get() = Brush.linearGradient(listOf(HeroGradientStart, HeroGradientEnd))
 
 /**
  * Theme de GuardianApp: `MaterialTheme` de Compose con un `ColorScheme` y

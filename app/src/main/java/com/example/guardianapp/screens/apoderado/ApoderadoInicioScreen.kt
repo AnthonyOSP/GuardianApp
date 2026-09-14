@@ -1,8 +1,6 @@
 package com.example.guardianapp.screens.apoderado
 
 import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -17,17 +15,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,41 +38,50 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.example.guardianapp.fcm.DeviceRegistrationState
 import com.example.guardianapp.fcm.FcmTokenRepository
 import com.example.guardianapp.fcm.GuardianNotificationCenter
+import com.example.guardianapp.fcm.hasNotificationsPermission
+import com.example.guardianapp.fcm.needsNotificationsPermission
 import com.example.guardianapp.firebase.VinculacionRepository
 import com.example.guardianapp.firebase.VinculacionState
-import com.example.guardianapp.identity.LocalIdentity
 import com.example.guardianapp.ui.components.AnimatedStatus
+import com.example.guardianapp.ui.components.GuardianCard
+import com.example.guardianapp.ui.components.GuardianHeroStyle
+import com.example.guardianapp.ui.components.GuardianIconButton
+import com.example.guardianapp.ui.components.GuardianLogoBadge
+import com.example.guardianapp.ui.components.GuardianSectionTitle
+import com.example.guardianapp.ui.components.GuardianStatusCard
+import com.example.guardianapp.ui.components.GuardianTopBar
 import com.example.guardianapp.ui.components.HistorialEntryCard
-import com.example.guardianapp.ui.components.SectionCard
 import com.example.guardianapp.ui.components.categoryFor
+import com.example.guardianapp.ui.components.contentColor
 import com.example.guardianapp.ui.components.formatTime
+import com.example.guardianapp.ui.icons.GuardianIcons
 import com.example.guardianapp.ui.theme.ButtonShape
 import com.example.guardianapp.ui.theme.successColor
 
 /**
- * FASE 9, pestaña "Inicio" del Apoderado: estado de registro FCM,
+ * Pestaña "Inicio" del Apoderado, rediseñada sobre
+ * `design/guardianapp-ui-reference.png`: estado de registro FCM,
  * vinculación con el Usuario, y una vista compacta de la última actividad
- * (con acceso directo a la pestaña Historial completa). Contenido que
- * antes vivía directo en `ApoderadoScreen.kt`; `ApoderadoScreen` sigue
- * siendo quien crea `FcmTokenRepository`/`VinculacionRepository` y dispara
- * el `LaunchedEffect` de registro (sin cambios ahí).
+ * (con acceso directo a Historial). Contenido que antes vivía directo en
+ * `ApoderadoScreen.kt`; `ApoderadoScreen` sigue siendo quien crea
+ * `FcmTokenRepository`/`VinculacionRepository` y dispara el `LaunchedEffect`
+ * de registro (sin cambios ahí).
  *
- * La tarjeta "hero" ("Todo listo"/"Registrando...") está inspirada en
- * `design/guardian-navigation.png`, pero adaptada a lo que esta app puede
- * verificar de verdad: no afirma que "el Usuario está conectado" (el
- * Apoderado no tiene forma de comprobar eso hoy), solo el estado real de
- * *su propio* registro para recibir notificaciones.
+ * La tarjeta "hero" ("Todo listo"/"Registrando...") sigue sin afirmar que
+ * "el Usuario está conectado" (el Apoderado no tiene forma de comprobar eso
+ * hoy) — solo el estado real de *su propio* registro para recibir
+ * notificaciones, igual que antes del rediseño.
  */
 @Composable
 fun ApoderadoInicioScreen(
     fcmTokenRepository: FcmTokenRepository,
     vinculacionRepository: VinculacionRepository,
     apoderadoId: String,
-    onVerHistorialCompleto: () -> Unit
+    onVerHistorialCompleto: () -> Unit,
+    onOpenAjustes: () -> Unit
 ) {
     val context = LocalContext.current
     var notificationsPermissionGranted by remember {
@@ -96,25 +103,28 @@ fun ApoderadoInicioScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "GuardianApp", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Modo Apoderado",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        GuardianTopBar(
+            title = "GuardianApp",
+            subtitle = "Modo Apoderado",
+            leading = { GuardianLogoBadge() },
+            trailing = {
+                GuardianIconButton(icon = Icons.Default.Notifications, contentDescription = "Notificaciones", onClick = onOpenAjustes)
+            }
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         if (needsNotificationsPermission() && !notificationsPermissionGranted) {
-            SectionCard {
+            GuardianCard {
                 Text(
                     text = "GuardianApp necesita permiso para mostrar notificaciones.",
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
-                    shape = ButtonShape
+                    shape = ButtonShape,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Conceder permiso de notificaciones")
                 }
@@ -125,7 +135,7 @@ fun ApoderadoInicioScreen(
         EstadoHeroCard(fcmTokenRepository.registrationState)
         Spacer(modifier = Modifier.height(16.dp))
 
-        SectionCard {
+        GuardianCard {
             VinculacionSection(
                 vinculacionState = vinculacionRepository.vinculacionState,
                 onVincular = { codigo -> vinculacionRepository.vincular(codigo, apoderadoId) }
@@ -137,68 +147,77 @@ fun ApoderadoInicioScreen(
     }
 }
 
-/** Tarjeta "hero" (siempre oscura) con el estado real de registro de este dispositivo. */
+/** Tarjeta "hero degradado" con el estado real de registro de este dispositivo. */
 @Composable
 private fun EstadoHeroCard(state: DeviceRegistrationState) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 360.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        shape = MaterialTheme.shapes.large,
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            AnimatedStatus(targetState = state) { s ->
-                when (s) {
-                    is DeviceRegistrationState.Idle,
-                    is DeviceRegistrationState.Registering -> Column {
-                        Text(
-                            text = "Registrando dispositivo...",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = "Un momento, estamos preparando tu dispositivo para recibir alertas.",
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                        )
-                    }
-                    is DeviceRegistrationState.Registered -> Column {
+    GuardianStatusCard(style = GuardianHeroStyle.GRADIENT) {
+        val textColor = GuardianHeroStyle.GRADIENT.contentColor()
+        AnimatedStatus(targetState = state) { s ->
+            when (s) {
+                is DeviceRegistrationState.Idle,
+                is DeviceRegistrationState.Registering -> Column {
+                    Text(
+                        text = "Registrando dispositivo...",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor
+                    )
+                    Text(
+                        text = "Un momento, estamos preparando tu dispositivo para recibir alertas.",
+                        color = textColor.copy(alpha = 0.85f)
+                    )
+                }
+                is DeviceRegistrationState.Registered -> Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(color = textColor.copy(alpha = 0.22f), shape = CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = textColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Todo listo",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = textColor
                         )
-                        Text(
-                            text = "Tu dispositivo está registrado para recibir alertas.",
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(color = successColor(), shape = CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Dispositivo conectado",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
                     }
-                    is DeviceRegistrationState.Error -> Column {
-                        Text(
-                            text = "No se pudo registrar el dispositivo",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Tu dispositivo está registrado para recibir alertas.",
+                        color = textColor.copy(alpha = 0.85f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(color = textColor, shape = CircleShape)
                         )
-                        Text(text = s.message, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Dispositivo conectado",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = textColor
+                        )
                     }
+                }
+                is DeviceRegistrationState.Error -> Column {
+                    Text(
+                        text = "No se pudo registrar el dispositivo",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor
+                    )
+                    Text(text = s.message, color = textColor.copy(alpha = 0.85f))
                 }
             }
         }
@@ -218,13 +237,28 @@ private fun VinculacionSection(
 ) {
     var codigo by remember { mutableStateOf("") }
 
-    Text(text = "Vincular con tu Usuario", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = GuardianIcons.Link,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(text = "Vincular con tu Usuario", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    }
     Spacer(modifier = Modifier.height(8.dp))
     Text(
         text = "Pídele a tu Usuario el código de 6 caracteres que aparece en su pantalla.",
         style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(modifier = Modifier.height(12.dp))
     OutlinedTextField(
@@ -232,10 +266,10 @@ private fun VinculacionSection(
         onValueChange = { codigo = it },
         label = { Text("Código de tu Usuario") },
         singleLine = true,
-        modifier = Modifier.widthIn(max = 320.dp)
+        modifier = Modifier.fillMaxWidth()
     )
     Spacer(modifier = Modifier.height(12.dp))
-    Button(onClick = { onVincular(codigo) }, shape = ButtonShape) {
+    Button(onClick = { onVincular(codigo) }, shape = ButtonShape, modifier = Modifier.fillMaxWidth()) {
         Text("Vincular")
     }
     Spacer(modifier = Modifier.height(8.dp))
@@ -253,48 +287,30 @@ private fun VinculacionSection(
     }
 }
 
-/** Vista compacta de los últimos eventos, con acceso directo a la pestaña Historial completa. */
+/** Vista compacta de los últimos eventos, con acceso directo al Historial completo. */
 @Composable
 private fun UltimaActividadCard(onVerTodo: () -> Unit) {
     val historial = GuardianNotificationCenter.history
-    SectionCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = "Última actividad", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            TextButton(onClick = onVerTodo) {
-                Text("Ver todo")
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
+    GuardianCard {
+        GuardianSectionTitle(title = "Última actividad", trailingText = "Ver todo", onTrailingClick = onVerTodo)
+        Spacer(modifier = Modifier.height(12.dp))
         if (historial.isEmpty()) {
             Text(
                 text = "Esperando eventos...",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
         } else {
-            historial.take(2).forEach { event ->
-                HistorialEntryCard(
-                    category = categoryFor(event.type),
-                    message = event.message,
-                    timeLabel = formatTime(event.receivedAtMillis)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                historial.take(2).forEach { event ->
+                    HistorialEntryCard(
+                        category = categoryFor(event.type),
+                        message = event.message,
+                        timeLabel = formatTime(event.receivedAtMillis)
+                    )
+                }
             }
         }
     }
-}
-
-/** Antes de Android 13 (API 33), las notificaciones no requieren permiso en tiempo de ejecución. */
-private fun needsNotificationsPermission(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-
-private fun hasNotificationsPermission(context: android.content.Context): Boolean {
-    if (!needsNotificationsPermission()) return true
-    return ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.POST_NOTIFICATIONS
-    ) == PackageManager.PERMISSION_GRANTED
 }
