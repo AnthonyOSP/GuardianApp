@@ -6,6 +6,10 @@ package com.example.guardianapp
  * adelante enviará el ESP32 por BLE (todavía no hay hardware — ver
  * `esp32/README.md` y `ble/`, que esta fase no toca).
  *
+ * Desde que existe el ESP32 real, el firmware también puede mandar estos
+ * mismos códigos por BLE ([fromBlePayload]) y el resultado es idéntico al
+ * del botón de la app.
+ *
  * [type]/[message] viajan tal cual al backend
  * ([com.example.guardianapp.backend.BackendEventRepository.notifyEvent]);
  * [emoji]/[label] arman el texto de los botones y, cuando la app del
@@ -36,5 +40,16 @@ enum class SimulatedEvent(
     companion object {
         /** `null` si [type] no corresponde a ninguno de estos 4 eventos (p. ej. el `ESP32_EVENT` real). */
         fun fromType(type: String?): SimulatedEvent? = entries.find { it.type == type }
+
+        /**
+         * Interpreta el texto que llega del ESP32 por BLE: si es uno de estos
+         * 4 códigos (`EMERGENCY`, `FOOD`, `BATHROOM`, `HELP`; sin distinguir
+         * mayúsculas, ignorando espacios) devuelve ese evento, para que el
+         * botón físico produzca la misma notificación que el botón de la app.
+         * Cualquier otro texto (p. ej. `EVENTO_TEST`) da `null` y se sigue
+         * enviando como `ESP32_EVENT` genérico. Ver `esp32/README.md`.
+         */
+        fun fromBlePayload(payload: String): SimulatedEvent? =
+            entries.find { it.type.equals(payload.trim(), ignoreCase = true) }
     }
 }

@@ -7,6 +7,8 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -86,12 +88,25 @@ fun GuardianAppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        shapes = GuardianShapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalGuardianDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            shapes = GuardianShapes,
+            content = content
+        )
+    }
 }
+
+/**
+ * Si la app se está dibujando en modo oscuro — puede no coincidir con el
+ * sistema, porque en Ajustes se puede forzar Claro/Oscuro (ver
+ * [ThemeSettings]). Usar esto en vez de `isSystemInDarkTheme()` dentro de
+ * la app.
+ */
+private val LocalGuardianDarkTheme = staticCompositionLocalOf { false }
+
+@Composable
+fun isGuardianDarkTheme(): Boolean = LocalGuardianDarkTheme.current
 
 /**
  * Verde de éxito para los estados "✓ ... correctamente". No es un rol
@@ -99,4 +114,4 @@ fun GuardianAppTheme(
  * resuelve aparte según el modo claro/oscuro activo.
  */
 @Composable
-fun successColor(): Color = if (isSystemInDarkTheme()) SuccessGreenDark else SuccessGreenLight
+fun successColor(): Color = if (isGuardianDarkTheme()) SuccessGreenDark else SuccessGreenLight

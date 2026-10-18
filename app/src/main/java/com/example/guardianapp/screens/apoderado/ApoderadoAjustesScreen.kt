@@ -33,6 +33,7 @@ import com.example.guardianapp.fcm.DeviceRegistrationState
 import com.example.guardianapp.ui.components.GuardianIconBadge
 import com.example.guardianapp.ui.components.GuardianTopBar
 import com.example.guardianapp.ui.components.SettingsRow
+import com.example.guardianapp.ui.components.ThemeSettingRow
 import com.example.guardianapp.ui.icons.GuardianIcons
 import com.example.guardianapp.ui.theme.ButtonShape
 
@@ -77,6 +78,7 @@ fun ApoderadoAjustesScreen(
                     else -> "Registrando..."
                 }
             )
+            ThemeSettingRow()
             SettingsRow(
                 icon = GuardianIcons.Link,
                 title = "Dispositivos vinculados",

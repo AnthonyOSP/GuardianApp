@@ -67,12 +67,18 @@ fun UsuarioBleScreen(onCerrarSesion: () -> Unit) {
     // dos llamadas de red independientes: una puede fallar sin afectar a la
     // otra. BleManager no sabe nada de ninguna de las dos, solo expone
     // `lastEvent`.
+    //
+    // Si el ESP32 manda uno de los 4 códigos conocidos (EMERGENCY, FOOD,
+    // BATHROOM, HELP), se envía como ese tipo de evento — el backend arma el
+    // título "🚨 Emergencia" etc. igual que con los botones de la app. Si
+    // manda otro texto, se envía como ESP32_EVENT genérico ("Nuevo evento").
     LaunchedEffect(bleManager.lastEvent) {
         bleManager.lastEvent?.let { event ->
             firebaseRepository.logEvent(event.message)
+            val knownEvent = SimulatedEvent.fromBlePayload(event.message)
             backendEventRepository.notifyEvent(
-                type = EventConstants.EVENT_TYPE,
-                message = event.message,
+                type = knownEvent?.type ?: EventConstants.EVENT_TYPE,
+                message = knownEvent?.message ?: event.message,
                 deviceId = EventConstants.DEFAULT_DEVICE_ID,
                 usuarioId = usuarioId
             )

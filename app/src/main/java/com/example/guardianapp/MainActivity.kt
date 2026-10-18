@@ -4,21 +4,27 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.view.WindowCompat
 import com.example.guardianapp.fcm.GuardianNotificationCenter
 import com.example.guardianapp.fcm.GuardianNotifications
 import com.example.guardianapp.fcm.NotifiedEvent
 import com.example.guardianapp.ui.theme.GuardianAppTheme
+import com.example.guardianapp.ui.theme.ThemeMode
+import com.example.guardianapp.ui.theme.ThemeSettings
 
 /**
  * FASE 2: selección de rol (Usuario / Apoderado) y pantallas locales
@@ -40,8 +46,24 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleNotificationIntent(intent)
+        ThemeSettings.load(this)
         setContent {
-            GuardianAppTheme {
+            val darkTheme = when (ThemeSettings.mode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            // Íconos de la barra de estado/navegación legibles sobre el fondo
+            // de la app: oscuros en tema claro, claros en tema oscuro. Hace
+            // falta porque el tema puede forzarse en Ajustes (distinto al del
+            // sistema), y el tema XML (`themes.xml`) solo sigue al sistema.
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !darkTheme
+                    isAppearanceLightNavigationBars = !darkTheme
+                }
+            }
+            GuardianAppTheme(darkTheme = darkTheme) {
                 GuardianAppRoot()
             }
         }
@@ -90,17 +112,22 @@ fun GuardianAppRoot() {
     // equipos con notch/punch-hole. Se aplica una sola vez acá, en la raíz,
     // para que alcance a las tres pantallas (selección de rol, Usuario,
     // Apoderado) sin duplicarlo en cada una.
+    //
+    // El Surface (fondo) va a pantalla completa y el padding solo al
+    // contenido: así el fondo de la app también pinta detrás de la barra de
+    // estado, que si no mostraría el fondo de la ventana (`themes.xml`, que
+    // sigue al tema del sistema y no al elegido en Ajustes).
     Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeDrawingPadding(),
+        modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        val role = selectedRole
-        when (role) {
-            null -> RoleSelectionScreen(onRoleSelected = { selectedRole = it })
-            Role.USUARIO -> UsuarioBleScreen(onCerrarSesion = { selectedRole = null })
-            Role.APODERADO -> ApoderadoScreen(onCerrarSesion = { selectedRole = null })
+        Box(modifier = Modifier.safeDrawingPadding()) {
+            val role = selectedRole
+            when (role) {
+                null -> RoleSelectionScreen(onRoleSelected = { selectedRole = it })
+                Role.USUARIO -> UsuarioBleScreen(onCerrarSesion = { selectedRole = null })
+                Role.APODERADO -> ApoderadoScreen(onCerrarSesion = { selectedRole = null })
+            }
         }
     }
 }

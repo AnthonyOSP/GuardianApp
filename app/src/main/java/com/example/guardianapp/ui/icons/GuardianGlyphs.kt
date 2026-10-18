@@ -1,17 +1,19 @@
 package com.example.guardianapp.ui.icons
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import com.example.guardianapp.ui.theme.HeroGradientEnd
-import com.example.guardianapp.ui.theme.HeroGradientStart
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.guardianapp.R
+import com.example.guardianapp.ui.theme.isGuardianDarkTheme
 
 /**
  * Íconos "de marca" dibujados a mano con [Canvas] (mismo criterio que
@@ -178,40 +180,36 @@ fun EmergencyGlyph(tint: Color, modifier: Modifier = Modifier) {
 }
 
 /**
- * Logo de marca: escudo con degradado azul + corazón blanco al centro
- * (mismo espíritu que la portada de `design/guardianapp-ui-reference.png`).
- * Se usa en miniatura en [com.example.guardianapp.ui.components.GuardianTopBar]
- * y más grande en `RoleSelectionScreen`.
+ * Logo de marca (escudo + corazón + señal), vectorizado desde
+ * `design/guardianapp-escudo-exacto.svg` en `res/drawable/guardian_escudo.xml`.
+ * En tema oscuro usa `guardian_escudo_dark.xml` (escudo blanco, como en el
+ * ícono de la app). Se elige según [isGuardianDarkTheme] y no con
+ * `drawable-night/`, porque el tema de la app puede forzarse en Ajustes y
+ * `drawable-night/` solo sigue al sistema. Se usa en miniatura en
+ * [com.example.guardianapp.ui.components.GuardianTopBar].
  */
 @Composable
 fun GuardianLogo(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
+    Image(
+        painter = painterResource(if (isGuardianDarkTheme()) R.drawable.guardian_escudo_dark else R.drawable.guardian_escudo),
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = modifier
+    )
+}
 
-        val shield = Path().apply {
-            moveTo(w * 0.5f, 0f)
-            lineTo(w * 0.92f, h * 0.16f)
-            lineTo(w * 0.92f, h * 0.52f)
-            cubicTo(w * 0.92f, h * 0.80f, w * 0.72f, h * 0.95f, w * 0.5f, h)
-            cubicTo(w * 0.28f, h * 0.95f, w * 0.08f, h * 0.80f, w * 0.08f, h * 0.52f)
-            lineTo(w * 0.08f, h * 0.16f)
-            close()
-        }
-        drawPath(path = shield, brush = Brush.linearGradient(listOf(HeroGradientStart, HeroGradientEnd)))
-
-        // Corazón: dos círculos + un triángulo, superpuestos.
-        val cx = w * 0.5f
-        val cy = h * 0.46f
-        val r = w * 0.155f
-        drawCircle(color = Color.White, radius = r, center = Offset(cx - r * 0.95f, cy - r * 0.35f))
-        drawCircle(color = Color.White, radius = r, center = Offset(cx + r * 0.95f, cy - r * 0.35f))
-        val heartTip = Path().apply {
-            moveTo(cx - r * 1.9f, cy - r * 0.15f)
-            lineTo(cx + r * 1.9f, cy - r * 0.15f)
-            lineTo(cx, cy + r * 1.9f)
-            close()
-        }
-        drawPath(path = heartTip, color = Color.White)
-    }
+/**
+ * Logo con texto "GuardianApp", vectorizado desde
+ * `design/guardianapp-logo-exacto.svg` (`res/drawable/guardian_logo.xml`,
+ * y `guardian_logo_dark.xml` para tema oscuro — mismo criterio que
+ * [GuardianLogo]). Se usa en la portada (`RoleSelectionScreen`).
+ */
+@Composable
+fun GuardianLogoWithText(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(if (isGuardianDarkTheme()) R.drawable.guardian_logo_dark else R.drawable.guardian_logo),
+        contentDescription = "GuardianApp",
+        contentScale = ContentScale.Fit,
+        modifier = modifier
+    )
 }

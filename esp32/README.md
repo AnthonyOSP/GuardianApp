@@ -56,3 +56,24 @@ proyecto Android.
     demostraciones en vivo sin esperar los 10 segundos).
 - Si el teléfono se desconecta, el ESP32 vuelve a anunciarse automáticamente
   para permitir una nueva conexión.
+
+## Qué texto mandar (códigos de evento)
+
+GuardianApp reconoce estos 4 textos en la characteristic (sin distinguir
+mayúsculas). Con cualquiera de ellos, el Apoderado recibe la misma
+notificación que con el botón correspondiente de la app:
+
+| Texto enviado por BLE | Notificación al Apoderado |
+|---|---|
+| `EMERGENCY` | 🚨 Emergencia — "El Usuario ha enviado una alerta de emergencia." |
+| `FOOD` | 🍽️ Comida — "El Usuario necesita comida." |
+| `BATHROOM` | 🚻 Baño — "El Usuario necesita ayuda para ir al baño." |
+| `HELP` | 🆘 Ayuda — "El Usuario necesita ayuda." |
+
+Cualquier otro texto (por ejemplo `EVENTO_TEST`, el de este sketch de
+prueba) llega como notificación genérica: **Nuevo evento** — `Evento
+"EVENTO_TEST" desde ESP32_GUARDIAN`.
+
+Ejemplo en el sketch: `enviarEvento("EMERGENCY");` en vez de
+`enviarEvento("EVENTO_TEST");`. Máximo 20 bytes por mensaje (Android no
+negocia un MTU mayor); los 4 códigos caben de sobra.

@@ -33,7 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.guardianapp.ui.components.pressScale
-import com.example.guardianapp.ui.icons.GuardianLogo
+import com.example.guardianapp.ui.icons.GuardianLogoWithText
 import com.example.guardianapp.ui.theme.GuardianAppTheme
 import com.example.guardianapp.ui.theme.GuardianBlueGradient
 
@@ -54,15 +54,8 @@ fun RoleSelectionScreen(onRoleSelected: (Role) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        GuardianLogo(modifier = Modifier.size(80.dp))
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "GuardianApp",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+        GuardianLogoWithText(modifier = Modifier.fillMaxWidth().widthIn(max = 280.dp).height(92.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "¿Con qué rol vas a usar la app?",
             style = MaterialTheme.typography.bodyMedium,

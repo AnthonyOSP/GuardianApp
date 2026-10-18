@@ -81,7 +81,7 @@ class GuardianFirebaseMessagingService : FirebaseMessagingService() {
         // Fase 4/5/6), fromType(type) da `null` y el comportamiento no cambia.
         val simulatedEvent = SimulatedEvent.fromType(type)
         val title = simulatedEvent?.notificationTitle ?: notification.title ?: "Nuevo evento"
-        val body = simulatedEvent?.let { eventMessage } ?: notification.body ?: "Se recibió un evento desde $deviceId"
+        val body = simulatedEvent?.let { eventMessage } ?: notification.body ?: "Evento \"$eventMessage\" desde $deviceId"
 
         if (!hasNotificationPermission()) {
             // Permiso denegado (solo posible desde Android 13/API 33):
