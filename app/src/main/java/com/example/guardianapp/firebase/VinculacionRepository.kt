@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.edit
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -28,6 +29,23 @@ import com.google.firebase.firestore.FirebaseFirestore
 class VinculacionRepository(private val context: Context) {
 
     var vinculacionState by mutableStateOf<VinculacionState>(VinculacionState.Idle)
+        private set
+
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    /**
+     * Código del Usuario con el que este Apoderado se vinculó por última vez
+     * con éxito, o `null` si nunca se vinculó. Se persiste localmente para
+     * que la pantalla muestre "Vinculado con …" en vez del formulario cada
+     * vez que se abre la app (`vinculaciones` no es legible desde el
+     * cliente, ver `firestore.rules`, así que no se puede consultar).
+     *
+     * Es solo lo que este teléfono recuerda: si otro Apoderado se vincula
+     * después al mismo código, sobreescribe `vinculaciones/{código}` y este
+     * valor queda desactualizado sin que el teléfono se entere (mismo
+     * caveat "sin Auth todavía" que el resto de la vinculación).
+     */
+    var linkedUsuarioId by mutableStateOf(prefs.getString(KEY_LINKED_USUARIO_ID, null))
         private set
 
     /**
@@ -59,7 +77,11 @@ class VinculacionRepository(private val context: Context) {
                         "createdAt" to FieldValue.serverTimestamp()
                     )
                 )
-                .addOnSuccessListener { vinculacionState = VinculacionState.Success }
+                .addOnSuccessListener {
+                    prefs.edit { putString(KEY_LINKED_USUARIO_ID, code) }
+                    linkedUsuarioId = code
+                    vinculacionState = VinculacionState.Success
+                }
                 .addOnFailureListener { e -> vinculacionState = VinculacionState.Error(describeFirebaseError(e)) }
         } catch (e: Exception) {
             vinculacionState = VinculacionState.Error(describeFirebaseError(e))
@@ -68,5 +90,7 @@ class VinculacionRepository(private val context: Context) {
 
     companion object {
         const val VINCULACIONES_COLLECTION = "vinculaciones"
+        private const val PREFS_NAME = "guardian_vinculacion"
+        private const val KEY_LINKED_USUARIO_ID = "linked_usuario_id"
     }
 }

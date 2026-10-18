@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -138,6 +139,7 @@ fun ApoderadoInicioScreen(
         GuardianCard {
             VinculacionSection(
                 vinculacionState = vinculacionRepository.vinculacionState,
+                linkedUsuarioId = vinculacionRepository.linkedUsuarioId,
                 onVincular = { codigo -> vinculacionRepository.vincular(codigo, apoderadoId) }
             )
         }
@@ -229,60 +231,152 @@ private fun EstadoHeroCard(state: DeviceRegistrationState) {
  * `UsuarioInicioScreen` en el otro teléfono — NO es una medida de
  * seguridad, es solo el mecanismo de emparejamiento de esta fase (ver
  * `VinculacionRepository` y `firestore.rules`).
+ *
+ * Si este teléfono ya se vinculó antes ([linkedUsuarioId] != null) se
+ * muestra solo el código vinculado y un botón "Cambiar código" — el
+ * formulario aparece únicamente al vincular por primera vez o al cambiar.
  */
 @Composable
 private fun VinculacionSection(
     vinculacionState: VinculacionState,
+    linkedUsuarioId: String?,
     onVincular: (String) -> Unit
+) {
+    var cambiando by remember { mutableStateOf(false) }
+    // Al terminar una vinculación con éxito se vuelve a la vista "Vinculado".
+    LaunchedEffect(vinculacionState) {
+        if (vinculacionState is VinculacionState.Success) cambiando = false
+    }
+
+    AnimatedStatus(targetState = linkedUsuarioId != null && !cambiando) { vinculado ->
+        if (vinculado && linkedUsuarioId != null) {
+            VinculadoView(
+                linkedUsuarioId = linkedUsuarioId,
+                justLinked = vinculacionState is VinculacionState.Success,
+                onCambiar = { cambiando = true }
+            )
+        } else {
+            VinculacionForm(
+                vinculacionState = vinculacionState,
+                onVincular = onVincular,
+                onCancelar = if (linkedUsuarioId != null) ({ cambiando = false }) else null
+            )
+        }
+    }
+}
+
+@Composable
+private fun VinculadoView(linkedUsuarioId: String, justLinked: Boolean, onCambiar: () -> Unit) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(color = successColor().copy(alpha = 0.15f), shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = successColor(),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(text = "Vinculado con tu Usuario", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Código $linkedUsuarioId",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = if (justLinked) "✓ Vinculado correctamente. Recibirás aquí sus alertas."
+            else "Recibirás aquí las alertas de este Usuario.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (justLinked) successColor() else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedButton(onClick = onCambiar, shape = ButtonShape, modifier = Modifier.fillMaxWidth()) {
+            Text("Cambiar código")
+        }
+    }
+}
+
+@Composable
+private fun VinculacionForm(
+    vinculacionState: VinculacionState,
+    onVincular: (String) -> Unit,
+    onCancelar: (() -> Unit)?
 ) {
     var codigo by remember { mutableStateOf("") }
 
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = GuardianIcons.Link,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = GuardianIcons.Link,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = if (onCancelar != null) "Cambiar Usuario vinculado" else "Vincular con tu Usuario",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
         }
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(text = "Vincular con tu Usuario", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-    }
-    Spacer(modifier = Modifier.height(8.dp))
-    Text(
-        text = "Pídele a tu Usuario el código de 6 caracteres que aparece en su pantalla.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Spacer(modifier = Modifier.height(12.dp))
-    OutlinedTextField(
-        value = codigo,
-        onValueChange = { codigo = it },
-        label = { Text("Código de tu Usuario") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth()
-    )
-    Spacer(modifier = Modifier.height(12.dp))
-    Button(onClick = { onVincular(codigo) }, shape = ButtonShape, modifier = Modifier.fillMaxWidth()) {
-        Text("Vincular")
-    }
-    Spacer(modifier = Modifier.height(8.dp))
-    AnimatedStatus(targetState = vinculacionState) { state ->
-        when (state) {
-            is VinculacionState.Idle -> Unit
-            is VinculacionState.Sending -> Text(text = "Vinculando...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            is VinculacionState.Success -> Text(text = "✓ Vinculado correctamente", color = successColor())
-            is VinculacionState.Error -> Text(
-                text = "✗ ${state.message}",
-                color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center
-            )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Pídele a tu Usuario el código de 6 caracteres que aparece en su pantalla.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = codigo,
+            onValueChange = { codigo = it },
+            label = { Text("Código de tu Usuario") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = { onVincular(codigo) },
+            enabled = vinculacionState !is VinculacionState.Sending,
+            shape = ButtonShape,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Vincular")
+        }
+        if (onCancelar != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(onClick = onCancelar, shape = ButtonShape, modifier = Modifier.fillMaxWidth()) {
+                Text("Cancelar")
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        AnimatedStatus(targetState = vinculacionState) { state ->
+            when (state) {
+                // El éxito se muestra en VinculadoView, a la que se vuelve automáticamente.
+                is VinculacionState.Idle, is VinculacionState.Success -> Unit
+                is VinculacionState.Sending -> Text(text = "Vinculando...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                is VinculacionState.Error -> Text(
+                    text = "✗ ${state.message}",
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
