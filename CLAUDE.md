@@ -478,9 +478,10 @@ history — there is no in-repo phase tracker).
   script, not committed) into VectorDrawables: `drawable/guardian_escudo.xml`
   (shield, used by `GuardianLogo` in the top bars) and
   `drawable/guardian_logo.xml` (shield + "GuardianApp" text, used by the new
-  `GuardianLogoWithText` on `RoleSelectionScreen`), each with a
-  `drawable-night/` variant (white shield/text, "App" in lighter blue) that
-  Android picks automatically. Launcher icon = adaptive icon:
+  `GuardianLogoWithText` on `RoleSelectionScreen`), each with a `*_dark`
+  variant (white shield/text, "App" in lighter blue) picked via
+  `isGuardianDarkTheme()` — deliberately **not** `drawable-night/`, which
+  only follows the system and would ignore the in-app theme setting below. Launcher icon = adaptive icon:
   `ic_launcher_background` (navy gradient), `ic_launcher_foreground` (white
   shield + teal signal, 52dp tall inside the 108dp canvas),
   `ic_launcher_monochrome` (Android 13 themed icons); legacy
@@ -490,13 +491,40 @@ history — there is no in-repo phase tracker).
   Brand colors sampled from the designs: blue `#0A6DFC→#0457D0`, teal
   `#0AC9BF`, navy text `#071E43`, icon background `#082553→#051E45`.
 
+- **"Modo oscuro" setting** (Ajustes, both roles — shared
+  `ui/components/ThemeSettingRow.kt`, a `SettingsRow` + radio dialog):
+  Según el sistema / Claro / Oscuro, persisted by `ui/theme/ThemeSettings.kt`
+  (an `object` with `mutableStateOf`, loaded in `MainActivity.onCreate`;
+  `SharedPreferences` file `guardian_settings`). Applied purely in Compose
+  (`GuardianAppTheme(darkTheme = ...)`), so switching is instant and does
+  **not** recreate the Activity (which would reset the unpersisted role).
+  Consequences: inside the app use `isGuardianDarkTheme()` (provided by
+  `GuardianAppTheme`), never `isSystemInDarkTheme()` or `-night` resource
+  qualifiers; `MainActivity` sets the status/navigation bar icon appearance
+  from the same flag (`WindowCompat.getInsetsController`), and
+  `GuardianAppRoot`'s `Surface` is full-screen with `safeDrawingPadding()`
+  only on the inner `Box`, so the app background (not the XML window
+  background, which follows the system) is what shows behind the status bar.
+
+- **ESP32 (C6) event codes**: the real hardware now exists. If the BLE
+  payload is one of `EMERGENCY`/`FOOD`/`BATHROOM`/`HELP` (case-insensitive,
+  trimmed — `SimulatedEvent.fromBlePayload`, unit-tested in
+  `SimulatedEventTest`), `UsuarioBleScreen` forwards it to the backend with
+  that `type` and `SimulatedEvent.message`, so the physical button produces
+  exactly the same notification as the in-app button. Any other payload
+  still goes as `ESP32_EVENT`; for those, `backend/src/routes/events.js`
+  now puts the received text in the body (`Evento "<message>" desde
+  <deviceId>`) instead of the old fixed "Se recibió un evento desde …" —
+  **backend change, needs a Render redeploy to take effect**. Firestore
+  `events` still logs the raw payload. Firmware contract documented in
+  `esp32/README.md` § "Qué texto mandar".
+
 Still not implemented (explicitly deferred to later phases — don't add unless
 asked): Firebase Authentication (would replace both `EVENTS_API_KEY` and the
 unauthenticated pairing code — see Phase 6 above), a general-purpose
 backend/API beyond this one small events endpoint, sensors, geolocation,
 SMS/WhatsApp/email, QR-code or invitation-based pairing (today's 6-char code
-is deliberately the simple version), real ESP32/BLE-triggered simulated
-events (Phase 7's buttons are a stand-in until the hardware exists), an admin
+is deliberately the simple version), an admin
 panel, `androidx.navigation` (still a plain enum + `when`, see Phase 9),
 persisted history across app restarts (Phase 9's history is in-memory only
 — see the "known, accepted limitation" note there). The next phase is final

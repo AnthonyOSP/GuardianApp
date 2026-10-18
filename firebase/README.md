@@ -168,7 +168,7 @@ en `backend/src/routes/events.js`, debe coincidir con
 | `FOOD` | `🍽️ Comida` | el `message` recibido |
 | `BATHROOM` | `🚻 Baño` | el `message` recibido |
 | `HELP` | `🆘 Ayuda` | el `message` recibido |
-| cualquier otro (ej. `ESP32_EVENT`, el evento real del ESP32) | `Nuevo evento` | `Se recibió un evento desde <deviceId>` (comportamiento genérico de la Fase 5, sin cambios) |
+| cualquier otro (ej. `ESP32_EVENT`: el ESP32 mandó un texto que no es uno de los 4 códigos) | `Nuevo evento` | `Evento "<message>" desde <deviceId>` |
 
 Enviar ambos payloads (no solo `data`) es intencional: así Android muestra
 la notificación automáticamente, **con el título/cuerpo ya correctos por
@@ -317,7 +317,7 @@ del sistema:
 ```text
 GuardianApp
 Nuevo evento
-Se recibió un evento desde ESP32_GUARDIAN
+Evento "EVENTO_TEST" desde ESP32_GUARDIAN
 ```
 
 Probar los tres estados de la app en el Teléfono 2 (Apoderado) como pide el

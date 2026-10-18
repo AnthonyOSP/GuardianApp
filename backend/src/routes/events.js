@@ -23,8 +23,8 @@ function isNonEmptyString(value) {
 // conocidos es directamente el `message` que ya manda Android — es
 // exactamente el texto que define SimulatedEvent.kt, así que no se duplica
 // acá. Cualquier `type` que no esté en esta tabla (hoy, el ESP32_EVENT real
-// de las Fases 4-6) conserva el título/cuerpo genérico de siempre, sin
-// cambios de comportamiento.
+// cuando el ESP32 manda un texto que no es uno de estos 4 códigos) usa el
+// título genérico "Nuevo evento" y un cuerpo con el texto recibido.
 const EVENT_TITLES = {
   EMERGENCY: '🚨 Emergencia',
   FOOD: '🍽️ Comida',
@@ -135,7 +135,9 @@ router.post('/events', async (req, res) => {
     tokens,
     notification: {
       title: knownTitle ?? 'Nuevo evento',
-      body: knownTitle ? message : `Se recibió un evento desde ${deviceId}`,
+      // Tipo desconocido (ESP32 mandó un texto que no es uno de los 4
+      // códigos): el cuerpo igual indica QUÉ evento llegó, no solo de dónde.
+      body: knownTitle ? message : `Evento "${message}" desde ${deviceId}`,
     },
     data: { type, message, deviceId },
   };
