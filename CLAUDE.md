@@ -461,6 +461,35 @@ history — there is no in-repo phase tracker).
     "Todos" with the generic 🔔/"Evento" fallback from `categoryFor()`,
     never matches a specific chip.
 
+- **Apoderado "ya vinculado" (post-Phase 9 UX fix)**: `VinculacionRepository`
+  now persists the last successfully linked Usuario code in its own
+  `SharedPreferences` file (`guardian_vinculacion`) and exposes it as
+  `linkedUsuarioId`. `ApoderadoInicioScreen`'s vinculación card shows
+  "Vinculado con tu Usuario · Código XXXXXX" + "Cambiar código" when it's
+  set, and the form (with "Cancelar") only on first link or when changing.
+  It's only what this phone remembers — `vinculaciones` is unreadable from
+  the client, so if another Apoderado overwrites the same code this goes
+  stale silently (same "no Auth yet" caveat). Installs linked before this
+  change have nothing saved and must link once more to populate it.
+
+- **Brand logo / launcher icon**: `design/guardianapp-{icon,escudo,logo}-exacto.svg`
+  are SVG wrappers around small embedded PNGs (no real vector paths), so
+  they were **vectorized by color layer** (potrace, done in a throwaway
+  script, not committed) into VectorDrawables: `drawable/guardian_escudo.xml`
+  (shield, used by `GuardianLogo` in the top bars) and
+  `drawable/guardian_logo.xml` (shield + "GuardianApp" text, used by the new
+  `GuardianLogoWithText` on `RoleSelectionScreen`), each with a
+  `drawable-night/` variant (white shield/text, "App" in lighter blue) that
+  Android picks automatically. Launcher icon = adaptive icon:
+  `ic_launcher_background` (navy gradient), `ic_launcher_foreground` (white
+  shield + teal signal, 52dp tall inside the 108dp canvas),
+  `ic_launcher_monochrome` (Android 13 themed icons); legacy
+  `mipmap-*/ic_launcher*.webp` were regenerated from the same shapes.
+  `ic_stat_notify` (notification icon) is the same shield silhouette. Lint
+  reports `VectorPath` warnings (long traced paths) — expected, harmless.
+  Brand colors sampled from the designs: blue `#0A6DFC→#0457D0`, teal
+  `#0AC9BF`, navy text `#071E43`, icon background `#082553→#051E45`.
+
 Still not implemented (explicitly deferred to later phases — don't add unless
 asked): Firebase Authentication (would replace both `EVENTS_API_KEY` and the
 unauthenticated pairing code — see Phase 6 above), a general-purpose
@@ -493,7 +522,7 @@ tagged `Fase 1: ...` / `Fase 2: ...`.
 ## Build system notes
 
 - Gradle wrapper: Gradle 9.5.0, Java toolchain 25 (see `gradle/gradle-daemon-jvm.properties`).
-- AGP version 9.3.2, declared via the version catalog (`gradle/libs.versions.toml`) and
+- AGP version 9.3.3, declared via the version catalog (`gradle/libs.versions.toml`) and
   used with its newer declarative DSL — notably:
   - `compileSdk { version = release(37) }` instead of the older `compileSdk = 37`.
   - `buildTypes { release { optimization { enable = false } } }` instead of the older
