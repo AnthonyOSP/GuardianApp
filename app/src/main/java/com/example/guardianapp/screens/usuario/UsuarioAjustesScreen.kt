@@ -32,6 +32,7 @@ import com.example.guardianapp.BuildConfig
 import com.example.guardianapp.ui.components.GuardianIconBadge
 import com.example.guardianapp.ui.components.GuardianTopBar
 import com.example.guardianapp.ui.components.SettingsRow
+import com.example.guardianapp.ui.components.ThemeSettingRow
 import com.example.guardianapp.ui.icons.GuardianIcons
 import com.example.guardianapp.ui.theme.ButtonShape
 
@@ -63,6 +64,7 @@ fun UsuarioAjustesScreen(usuarioId: String, onCerrarSesion: () -> Unit) {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsRow(icon = Icons.Default.Person, title = "Perfil", subtitle = "Próximamente")
             SettingsRow(icon = Icons.Default.Notifications, title = "Notificaciones", subtitle = "No aplica a tu rol todavía")
+            ThemeSettingRow()
             SettingsRow(icon = GuardianIcons.Link, title = "Dispositivos vinculados", subtitle = "Tu código: $usuarioId")
             SettingsRow(
                 icon = Icons.Default.Info,

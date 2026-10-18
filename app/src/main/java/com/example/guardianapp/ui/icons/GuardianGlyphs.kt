@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.example.guardianapp.R
+import com.example.guardianapp.ui.theme.isGuardianDarkTheme
 
 /**
  * Íconos "de marca" dibujados a mano con [Canvas] (mismo criterio que
@@ -181,14 +182,16 @@ fun EmergencyGlyph(tint: Color, modifier: Modifier = Modifier) {
 /**
  * Logo de marca (escudo + corazón + señal), vectorizado desde
  * `design/guardianapp-escudo-exacto.svg` en `res/drawable/guardian_escudo.xml`.
- * En tema oscuro Android elige solo `res/drawable-night/guardian_escudo.xml`
- * (escudo blanco, como en el ícono de la app). Se usa en miniatura en
+ * En tema oscuro usa `guardian_escudo_dark.xml` (escudo blanco, como en el
+ * ícono de la app). Se elige según [isGuardianDarkTheme] y no con
+ * `drawable-night/`, porque el tema de la app puede forzarse en Ajustes y
+ * `drawable-night/` solo sigue al sistema. Se usa en miniatura en
  * [com.example.guardianapp.ui.components.GuardianTopBar].
  */
 @Composable
 fun GuardianLogo(modifier: Modifier = Modifier) {
     Image(
-        painter = painterResource(R.drawable.guardian_escudo),
+        painter = painterResource(if (isGuardianDarkTheme()) R.drawable.guardian_escudo_dark else R.drawable.guardian_escudo),
         contentDescription = null,
         contentScale = ContentScale.Fit,
         modifier = modifier
@@ -198,13 +201,13 @@ fun GuardianLogo(modifier: Modifier = Modifier) {
 /**
  * Logo con texto "GuardianApp", vectorizado desde
  * `design/guardianapp-logo-exacto.svg` (`res/drawable/guardian_logo.xml`,
- * con su variante `drawable-night/` para tema oscuro). Se usa en la
- * portada (`RoleSelectionScreen`).
+ * y `guardian_logo_dark.xml` para tema oscuro — mismo criterio que
+ * [GuardianLogo]). Se usa en la portada (`RoleSelectionScreen`).
  */
 @Composable
 fun GuardianLogoWithText(modifier: Modifier = Modifier) {
     Image(
-        painter = painterResource(R.drawable.guardian_logo),
+        painter = painterResource(if (isGuardianDarkTheme()) R.drawable.guardian_logo_dark else R.drawable.guardian_logo),
         contentDescription = "GuardianApp",
         contentScale = ContentScale.Fit,
         modifier = modifier

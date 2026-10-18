@@ -152,6 +152,32 @@ object GuardianIcons {
         }.build()
     }
 
+    val DarkMode: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "GuardianIcons.DarkMode",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+                // d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36
+                //    -.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4
+                //    0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"
+                moveTo(12f, 3f)
+                curveToRelative(-4.97f, 0f, -9f, 4.03f, -9f, 9f)
+                reflectiveCurveToRelative(4.03f, 9f, 9f, 9f)
+                reflectiveCurveToRelative(9f, -4.03f, 9f, -9f)
+                curveToRelative(0f, -0.46f, -0.04f, -0.92f, -0.1f, -1.36f)
+                curveToRelative(-0.98f, 1.37f, -2.58f, 2.26f, -4.4f, 2.26f)
+                curveToRelative(-2.98f, 0f, -5.4f, -2.42f, -5.4f, -5.4f)
+                curveToRelative(0f, -1.81f, 0.89f, -3.42f, 2.26f, -4.4f)
+                curveToRelative(-0.44f, -0.06f, -0.9f, -0.1f, -1.36f, -0.1f)
+                close()
+            }
+        }.build()
+    }
+
     val History: ImageVector by lazy {
         ImageVector.Builder(
             name = "GuardianIcons.History",
